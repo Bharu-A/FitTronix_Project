@@ -1,0 +1,17 @@
+cd fittronix-admin
+npm start
+
+
+
+
+Visit http://localhost:3000/
+ → Home Page (with navbar, scroll, footer)
+
+Visit http://localhost:3000/admin/login
+ → Admin Login
+
+Visit http://localhost:3000/admin/dashboard
+ → Dashboard
+
+Visit http://localhost:3000/admin/signup
+ → Signup
