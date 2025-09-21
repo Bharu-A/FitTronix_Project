@@ -2,6 +2,8 @@ cd fittronix-admin
 npm start
 
 
+bharu74835@gmail.com
+Admin@74835
 
 
 Visit http://localhost:3000/

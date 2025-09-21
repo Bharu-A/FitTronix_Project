@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom"; // Add this import
 import { auth, db } from "../firebase";
 import {
   createUserWithEmailAndPassword,
@@ -11,6 +12,7 @@ import {
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 
 function Navbar({ toggleSidebar }) {
+  const navigate = useNavigate(); // Add this hook
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
@@ -36,54 +38,49 @@ function Navbar({ toggleSidebar }) {
 
   // check authentication status
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setIsAuthenticated(true);
-        const docRef = doc(db, "users", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const userData = docSnap.data();
-          setIsAdmin(userData.role === "admin");
-          setUserData(userData);
-          
-          // Generate mock notifications
-          const mockNotifications = [
-            {
-              id: 1,
-              title: "Welcome to FitTronix!",
-              message: "Your account has been created successfully.",
-              time: "2 hours ago",
-              read: false,
-              type: "info"
-            },
-            {
-              id: 2,
-              title: "New Workout Plan Available",
-              message: "Check out your personalized workout plan.",
-              time: "1 day ago",
-              read: false,
-              type: "workout"
-            },
-            {
-              id: 3,
-              title: "Weekly Progress Report",
-              message: "You've completed 80% of your weekly goals!",
-              time: "3 days ago",
-              read: true,
-              type: "progress"
-            }
-          ];
-          setNotifications(mockNotifications);
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      setIsAuthenticated(true);
+
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
+
+        // redirect if profile is incomplete
+        if (!userData.profileCompleted && window.location.pathname !== "/complete-profile") {
+          navigate("/complete-profile");
         }
+
+        setIsAdmin(userData.role === "admin");
+        setUserData({
+          ...userData,
+          email: user.email,
+          name: userData.name || user.displayName || "User",
+          photoURL: userData.photoURL || user.photoURL || "/profile.png",
+        });
       } else {
-        setIsAuthenticated(false);
-        setIsAdmin(false);
-        setUserData(null);
-        setNotifications([]);
+        // If no Firestore doc, fallback to auth
+        setUserData({
+          email: user.email,
+          name: user.displayName || "User",
+          photoURL: user.photoURL || "/profile.png",
+          role: "user",
+        });
       }
-    });
-    return () => unsubscribe();
-  }, []);
+    } else {
+      setIsAuthenticated(false);
+      setIsAdmin(false);
+      setUserData(null);
+      setNotifications([]);
+    }
+  });
+
+  return () => unsubscribe();
+}, [navigate]);
+
+
 
   // Check for saved theme preference
   useEffect(() => {
@@ -133,7 +130,7 @@ function Navbar({ toggleSidebar }) {
     }
   };
 
-  // signup
+  // signup - UPDATED TO REDIRECT TO COMPLETE PROFILE
   const handleSignup = async (e) => {
     e.preventDefault();
     setError("");
@@ -147,11 +144,12 @@ function Navbar({ toggleSidebar }) {
         displayName: name
       });
       
-      // Force all new users to "user" role for security
+      // Create user document with profileCompleted: false
       await setDoc(doc(db, "users", userCredential.user.uid), {
         email,
         name,
-        role: "user", // Force user role for all new signups
+        role: "user",
+        profileCompleted: false, // This will trigger the redirect
         createdAt: new Date(),
         lastLogin: new Date(),
         preferences: {
@@ -159,6 +157,9 @@ function Navbar({ toggleSidebar }) {
           notifications: true
         }
       });
+      
+      // Redirect to complete profile page
+      navigate("/complete-profile");
       setShowModal(false);
       resetForm();
     } catch (err) {

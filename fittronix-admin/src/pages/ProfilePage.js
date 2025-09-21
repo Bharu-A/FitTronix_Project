@@ -11,6 +11,9 @@ import { getAuth, onAuthStateChanged, updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage } from "../firebase"; // Make sure storage is exported from your Firebase config
+import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+
 
 // Custom hook for Firebase user data management
 function useFirebaseUser() {
@@ -19,7 +22,7 @@ function useFirebaseUser() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
@@ -42,7 +45,12 @@ function useFirebaseUser() {
                 phone: "",
                 dob: "",
                 location: "",
+                height: "",
+                weight: "",
+                gender: "",
                 fitnessGoal: "",
+                activityLevel: "",
+                profileCompleted: false, // Add this field
                 joined: new Date().toISOString().split('T')[0],
                 photoURL: firebaseUser.photoURL || ""
               };
@@ -68,6 +76,7 @@ function useFirebaseUser() {
 
     return () => unsubscribe();
   }, []);
+
 
   const updateUserData = async (updatedData) => {
     try {
@@ -122,6 +131,15 @@ function ProfilePage() {
   const [saveStatus, setSaveStatus] = useState({});
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && !user.profileCompleted && !loading) {
+      navigate("/complete-profile");
+    }
+  }, [user, loading, navigate]);
+
+ 
 
   // Initialize edit form when user data is loaded
   useEffect(() => {
@@ -312,14 +330,13 @@ function ProfilePage() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-gray-50 min-h-screen padding-top: 50px;">
-      {/* Header */}
-      <div className="flex justify-between items-center padding-top: 50px;">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">👤 Profile</h1>
-          <p className="text-gray-600">Manage your personal details & fitness goals</p>
-        </div>
-        
+    <div className="p-6 pt-[50px] space-y-6 bg-gray-50 min-h-screen">
+  {/* Header */}
+  <div className="flex justify-between items-center pt-[50px]">
+    <div>
+      <h1 className="text-3xl font-bold text-gray-800">👤 Profile</h1>
+      <p className="text-gray-600">Manage your personal details & fitness goals</p>
+    </div>
         {!isEditing ? (
           <Button 
             onClick={() => setIsEditing(true)}

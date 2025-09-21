@@ -13,6 +13,10 @@ import DashboardPage from "./pages/DashboardPage";
 import Navbar from "./components/Navbar"; // ✅ import Navbar
 import NutritionPage from "./pages/NutritionPage";
 import ProfilePage from "./pages/ProfilePage";
+import HealthTracker from "./pages/HealthTracker";
+import CompleteProfile from "./pages/CompleteProfile";
+import WorkoutPage from "./pages/WorkoutPage";
+import FitTronixSchedule from "./pages/FitTronixSchedule";
 function Layout({ children }) {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(true);
@@ -47,7 +51,10 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/nutrition" element={<NutritionPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          
+          <Route path="/healthTracker" element={<HealthTracker/>} />
+          <Route path="/complete-profile" element={<CompleteProfile />} />
+          <Route path="/workoutPage" element={<WorkoutPage />} />
+          <Route path="/schedule" element={<FitTronixSchedule />} />
 
         </Routes>
       </Layout>
