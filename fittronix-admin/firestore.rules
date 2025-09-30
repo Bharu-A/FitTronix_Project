@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Public homepage collections ----------
+    match /workoutCategories/{doc} { allow read: if true; }
+    match /exercises/{doc} { allow read: if true; }
+    match /weeklyPlans/{doc} { allow read: if true; }
+    match /testimonials/{doc} { allow read: if true; }
+    match /plans/{doc} { allow read: if true; }
+    match /features/{doc} { allow read: if true; }
+    match /motivationalQuotes/{doc} { allow read: if true; }
+
+    // ---------- CMS-style content (admin controlled) ----------
+    match /content/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /blogPosts/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /faqs/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /privacyPolicy/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    match /contactMessages/{doc} {
+      allow create: if true; // Anyone can submit a form
+      allow read, update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---------- User-specific data ----------
+    match /users/{userId} {
+      // A user can only create/read their own profile
+      allow read, create: if request.auth != null && request.auth.uid == userId;
+
+      // Allow user to update their own data, but not elevate role
+      allow update: if request.auth != null &&
+        request.auth.uid == userId &&
+        !(request.resource.data.keys().hasAny(['role']) &&
+          request.resource.data.role != resource.data.role);
+
+      // No user can delete their profile directly (admin only)
+      allow delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---------- Workout Sessions ----------
+    match /workoutSessions/{sessionId} {
+      allow create: if request.auth != null &&
+        request.auth.uid == request.resource.data.userId;
+
+      allow read, update, delete: if request.auth != null &&
+        request.auth.uid == resource.data.userId;
+    }
+
+    // ---------- AI Tasks ----------
+    match /ai_tasks/{doc} {
+      allow read, write: if request.auth != null &&
+        request.auth.uid == request.resource.data.uid;
+    }
+
+    // ---------- Admin-only collections ----------
+    match /adminData/{doc} {
+      allow read, write: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---------- Workouts ----------
+    match /workouts/{doc} {
+      allow read, create: if request.auth != null;
+      allow update, delete: if request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}

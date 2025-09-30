@@ -1,3 +1,4 @@
+// AdminLoginPage.jsx
 import React, { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "../firebase";
@@ -12,16 +13,27 @@ function AdminLoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+
     try {
       const userCred = await signInWithEmailAndPassword(auth, email, password);
       const uid = userCred.user.uid;
+
+      // Fetch user role from Firestore
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
 
-      if (userSnap.exists() && userSnap.data().role === "admin") {
-        navigate("/admin/dashboard");
+      if (userSnap.exists()) {
+        const role = userSnap.data().role;
+
+        if (role === "admin") {
+          navigate("/admin/dashboard");
+        } else {
+          setError("Access Denied: You are not an admin.");
+          await auth.signOut();
+        }
       } else {
-        setError("Access Denied: Not an admin");
+        setError("User not found in database.");
       }
     } catch (err) {
       setError(err.message);
@@ -34,8 +46,10 @@ function AdminLoginPage() {
       style={{ backgroundImage: "url('/assets/bg_img.png')" }}
     >
       <div className="bg-black/60 p-10 rounded-lg shadow-lg w-full max-w-md">
-        <h2 className="text-3xl font-bold text-white mb-2">Welcome Back!</h2>
-        <p className="text-sm text-gray-300 mb-6">Please login to your account.</p>
+        <h2 className="text-3xl font-bold text-white mb-2">Admin Login</h2>
+        <p className="text-sm text-gray-300 mb-6">
+          Please login with your admin credentials.
+        </p>
 
         {error && (
           <div className="mb-4 text-red-300 border border-red-500 p-2 rounded bg-red-500/10">
@@ -45,11 +59,13 @@ function AdminLoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label htmlFor="email" className="text-white block mb-1 text-sm">Username</label>
+            <label htmlFor="email" className="text-white block mb-1 text-sm">
+              Email
+            </label>
             <input
               type="email"
               id="email"
-              placeholder="Enter Username"
+              placeholder="Enter admin email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 rounded bg-white/10 text-white border border-white/30 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400"
@@ -57,11 +73,13 @@ function AdminLoginPage() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="text-white block mb-1 text-sm">Password</label>
+            <label htmlFor="password" className="text-white block mb-1 text-sm">
+              Password
+            </label>
             <input
               type="password"
               id="password"
-              placeholder="Enter Password"
+              placeholder="Enter password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-2 rounded bg-white/10 text-white border border-white/30 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400"

@@ -1,0 +1,1 @@
+Blogs approval pages and admin approval integrate into dashoard of admin
