@@ -1,4 +1,4 @@
-// src/pages/WorkoutPage.js - Final Enhanced version
+// src/pages/WorkoutPage.js - Fixed Version
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -24,9 +24,31 @@ import { ref, set, push, onValue } from 'firebase/database';
 import { db, auth, realtimeDb } from '../firebase';
 import { io } from 'socket.io-client';
 
+// Import AI Analysis Components
+import SessionStats from '../components/SessionStats';
+import FeedbackPanel from '../components/FeedbackPanel';
+import { useVideoAnalysis } from '../hooks/useVideoAnalysis';
+import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 
 const WorkoutPage = () => {
-  // State management
+  // State management - Define selectedExercise FIRST
+  const [selectedExercise, setSelectedExercise] = useState('pushup');
+  
+  // AI Video Analysis Hook - Now selectedExercise is defined
+  const {
+    videoRef,
+    canvasRef,
+    isAnalyzing,
+    sessionData,
+    startAnalysis,
+    stopAnalysis,
+    detector
+  } = useVideoAnalysis(selectedExercise);
+
+  // Speech synthesis for voice feedback
+  const { speak } = useSpeechSynthesis();
+
+  // Other state management
   const [activeDay, setActiveDay] = useState(0);
   const [workoutCategories, setWorkoutCategories] = useState([]);
   const [exercises, setExercises] = useState([]);
@@ -53,16 +75,14 @@ const WorkoutPage = () => {
     duration: 0,
     correctness: 0
   });
-  const [selectedExercise, setSelectedExercise] = useState('pushup');
   const [sessionStarted, setSessionStarted] = useState(false);
   
   // Video upload states
   const [videoUploadMode, setVideoUploadMode] = useState(false);
   const [uploadedVideo, setUploadedVideo] = useState(null);
   const [videoAnalysis, setVideoAnalysis] = useState(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isVideoAnalyzing, setIsVideoAnalyzing] = useState(false);
   
-  const videoRef = useRef(null);
   const streamRef = useRef(null);
   const socketRef = useRef(null);
   const animationRef = useRef(null);
@@ -87,10 +107,11 @@ const WorkoutPage = () => {
         socketRef.current.disconnect();
       }
       stopCamera();
+      stopAnalysis();
     };
   }, []);
 
-  // Initialize socket connection with better error handling
+  // Initialize socket connection for advanced features
   const initializeSocketConnection = () => {
     const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
     console.log(`🔌 Connecting to backend: ${backendUrl}`);
@@ -103,43 +124,6 @@ const WorkoutPage = () => {
     socketRef.current.on('connect', () => {
       console.log('✅ Connected to backend server');
       setError('');
-    });
-
-    socketRef.current.on('session_started', (data) => {
-      console.log('✅ Session started:', data);
-      setSessionStarted(true);
-      setError('');
-    });
-
-    socketRef.current.on('pose_feedback', (data) => {
-      if (data.error) {
-        console.error('❌ Analysis error:', data.error);
-        setError(`Analysis error: ${data.error}`);
-        return;
-      }
-      
-      console.log(`📊 ${data.exerciseType} - Reps: ${data.repCount}, Score: ${Math.round(data.correctnessScore * 100)}%`);
-      
-      setRealTimeFeedback(prev => [data, ...prev.slice(0, 9)]);
-      setSessionStats(prev => ({
-        ...prev,
-        reps: data.repCount || prev.reps,
-        correctness: Math.round(data.correctnessScore * 100),
-        duration: data.sessionStats?.duration || prev.duration,
-        calories: Math.floor((data.sessionStats?.duration || 0) * 0.1)
-      }));
-
-      // Store real-time data in Firebase
-      if (user) {
-        storeRealTimeData(data);
-      }
-    });
-
-    socketRef.current.on('session_ended', (data) => {
-      console.log('🏁 Session ended:', data);
-      setSessionStarted(false);
-      setRealTimeFeedback([]);
-      setSessionStats(prev => ({ ...prev, reps: 0, duration: 0, correctness: 0 }));
     });
 
     socketRef.current.on('analysis_error', (data) => {
@@ -158,6 +142,207 @@ const WorkoutPage = () => {
     });
   };
 
+  // Enhanced camera management
+  const startCamera = async () => {
+    if (!videoRef.current) {
+      console.error('Video element not found!');
+      return;
+    }
+
+    try {
+      console.log('📷 Starting camera...');
+      
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user',
+          frameRate: { ideal: 30 }
+        } 
+      });
+      
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      
+      return new Promise((resolve) => {
+        videoRef.current.onloadedmetadata = () => {
+          console.log('✅ Camera started successfully');
+          videoRef.current.play().then(() => {
+            console.log('🎥 Video playback started');
+            resolve(stream);
+          }).catch(error => {
+            console.error('❌ Video play failed:', error);
+            resolve(stream);
+          });
+        };
+        
+        setTimeout(() => {
+          resolve(stream);
+        }, 1000);
+      });
+    } catch (error) {
+      console.error('❌ Error accessing camera:', error.name, error.message);
+      let errorMsg = `Camera error: ${error.message}`;
+      if (error.name === 'NotAllowedError') {
+        errorMsg = 'Camera permission denied. Please allow camera access and try again.';
+      } else if (error.name === 'NotFoundError') {
+        errorMsg = 'No camera found on this device.';
+      } else if (error.name === 'NotSupportedError') {
+        errorMsg = 'Camera not supported in this browser.';
+      }
+      setError(errorMsg);
+      throw error;
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  // Enhanced session management with AI analysis
+  const startSession = async (workoutType = null) => {
+    if (!user) {
+      setError('Please log in to start a workout');
+      return;
+    }
+
+    try {
+      console.log('🎬 Starting AI workout session...');
+      
+      // Reset states
+      setRealTimeFeedback([]);
+      setSessionStats({
+        reps: 0,
+        sets: 1,
+        calories: 0,
+        duration: 0,
+        correctness: 0
+      });
+      
+      // Start camera and AI analysis
+      await startCamera();
+      await startAnalysis();
+      
+      setIsRecording(true);
+      
+      // Set the exercise type if provided
+      if (workoutType) {
+        const exerciseType = workoutType.toLowerCase().replace(/\s+/g, '');
+        setSelectedExercise(exerciseType);
+      }
+      
+      console.log(`🏋️ Starting ${selectedExercise} session with AI analysis...`);
+
+      // Create workout session in Firestore
+      const sessionRef = doc(collection(db, 'workoutSessions'));
+      const sessionData = {
+        id: sessionRef.id,
+        userId: user.uid,
+        startTime: serverTimestamp(),
+        exerciseType: selectedExercise,
+        status: 'active',
+        sets: 1,
+        aiEnabled: true
+      };
+      await setDoc(sessionRef, sessionData);
+
+      // Voice feedback
+      speak(`Starting ${selectedExercise} session. Let's begin!`);
+      
+    } catch (error) {
+      console.error('❌ Error starting session:', error);
+      setError(`Failed to start workout: ${error.message}`);
+      setIsRecording(false);
+      stopCamera();
+      stopAnalysis();
+    }
+  };
+
+  const endSession = async () => {
+    console.log('🏁 Ending AI workout session...');
+    setIsRecording(false);
+    setSessionStarted(false);
+    stopCamera();
+    stopAnalysis();
+    
+    try {
+      // Update workout session in Firestore
+      const sessionsQuery = query(
+        collection(db, 'workoutSessions'),
+        where('userId', '==', user.uid),
+        where('status', '==', 'active'),
+        orderBy('startTime', 'desc'),
+        limit(1)
+      );
+      
+      const snapshot = await getDocs(sessionsQuery);
+      if (!snapshot.empty) {
+        const sessionDoc = snapshot.docs[0];
+        await updateDoc(sessionDoc.ref, {
+          endTime: serverTimestamp(),
+          status: 'completed',
+          totalReps: sessionData.reps,
+          caloriesBurned: sessionData.calories,
+          averageCorrectness: sessionData.accuracy,
+          duration: sessionData.duration,
+          guidanceMessages: sessionData.guidanceMessages,
+          weakAreas: sessionData.weakAreas
+        });
+
+        // Update user progress
+        await updateUserProgress();
+      }
+
+      // Voice feedback
+      speak(`Session completed! You did ${sessionData.reps} reps with ${sessionData.accuracy}% accuracy.`);
+
+      // Reset states
+      setRealTimeFeedback([]);
+
+    } catch (error) {
+      console.error('Error ending session:', error);
+      setError('Failed to save workout session.');
+    }
+  };
+
+  // Update session stats from AI analysis
+  useEffect(() => {
+    if (isAnalyzing && sessionData) {
+      setSessionStats(prev => ({
+        ...prev,
+        reps: sessionData.reps,
+        correctness: sessionData.accuracy,
+        calories: sessionData.calories,
+        duration: sessionData.duration
+      }));
+
+      // Update real-time feedback
+      if (sessionData.guidanceMessages && sessionData.guidanceMessages.length > 0) {
+        setRealTimeFeedback(prev => [
+          {
+            message: sessionData.guidanceMessages[0],
+            correctness: sessionData.accuracy,
+            timestamp: Date.now()
+          },
+          ...prev.slice(0, 9)
+        ]);
+      }
+
+      // Store real-time data in Firebase
+      if (user && sessionData) {
+        storeRealTimeData(sessionData);
+      }
+    }
+  }, [sessionData, isAnalyzing, user]);
+
   // Store real-time workout data in Firebase
   const storeRealTimeData = async (data) => {
     try {
@@ -165,7 +350,8 @@ const WorkoutPage = () => {
       await set(sessionRef, {
         ...data,
         timestamp: Date.now(),
-        userId: user.uid
+        userId: user.uid,
+        exerciseType: selectedExercise
       });
     } catch (error) {
       console.error('Error storing real-time data:', error);
@@ -257,246 +443,24 @@ const WorkoutPage = () => {
     }
   };
 
-  // Enhanced camera management
-  const startCamera = async () => {
-    if (!videoRef.current) {
-      console.error('Video element not found!');
-      return;
-    }
-
-    try {
-      console.log('📷 Starting camera...');
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        } 
-      });
-      
-      // Store the stream reference
-      streamRef.current = stream;
-      
-      // Set the stream to video element
-      videoRef.current.srcObject = stream;
-      
-      // Wait for video to be ready
-      return new Promise((resolve) => {
-        videoRef.current.onloadedmetadata = () => {
-          console.log('✅ Camera started successfully');
-          videoRef.current.play().then(() => {
-            console.log('🎥 Video playback started');
-            resolve(stream);
-          }).catch(error => {
-            console.error('❌ Video play failed:', error);
-            resolve(stream);
-          });
-        };
-        
-        // Fallback in case onloadedmetadata doesn't fire
-        setTimeout(() => {
-          resolve(stream);
-        }, 1000);
-      });
-    } catch (error) {
-      console.error('❌ Error accessing camera:', error.name, error.message);
-      let errorMsg = `Camera error: ${error.message}`;
-      if (error.name === 'NotAllowedError') {
-        errorMsg = 'Camera permission denied. Please allow camera access and try again.';
-      } else if (error.name === 'NotFoundError') {
-        errorMsg = 'No camera found on this device.';
-      } else if (error.name === 'NotSupportedError') {
-        errorMsg = 'Camera not supported in this browser.';
-      }
-      setError(errorMsg);
-      throw error;
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop();
-      });
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  // Enhanced session management
-  const startSession = async (workoutType = null) => {
-    if (!user) {
-      setError('Please log in to start a workout');
-      return;
-    }
-
-    if (!socketRef.current || !socketRef.current.connected) {
-      setError('Not connected to analysis server. Please wait and try again.');
-      return;
-    }
-
-    try {
-      console.log('🎬 Starting workout session...');
-      
-      // Reset states
-      setRealTimeFeedback([]);
-      setSessionStats({
-        reps: 0,
-        sets: 1,
-        calories: 0,
-        duration: 0,
-        correctness: 0
-      });
-      
-      // Start camera first
-      await startCamera();
-      setIsRecording(true);
-      
-      // Set the exercise type
-      const exerciseType = (workoutType?.toLowerCase() || selectedExercise).replace(/\s+/g, '');
-      setSelectedExercise(exerciseType);
-      
-      console.log(`🏋️ Starting ${exerciseType} session...`);
-
-      // Start session with backend
-      socketRef.current.emit('start_session', {
-        userId: user.uid,
-        exerciseType: exerciseType
-      });
-
-      // Create workout session in Firestore
-      const sessionRef = doc(collection(db, 'workoutSessions'));
-      const sessionData = {
-        id: sessionRef.id,
-        userId: user.uid,
-        startTime: serverTimestamp(),
-        exerciseType: exerciseType,
-        status: 'active',
-        sets: 1
-      };
-      await setDoc(sessionRef, sessionData);
-
-      // Start sending frames after a brief delay
-      setTimeout(() => {
-        sendVideoFrames();
-      }, 500);
-      
-    } catch (error) {
-      console.error('❌ Error starting session:', error);
-      setError(`Failed to start workout: ${error.message}`);
-      setIsRecording(false);
-      stopCamera();
-    }
-  };
-
-  const endSession = async () => {
-    console.log('🏁 Ending workout session...');
-    setIsRecording(false);
-    setSessionStarted(false);
-    stopCamera();
-    
-    try {
-      if (socketRef.current && socketRef.current.connected) {
-        socketRef.current.emit('end_session', {
-          userId: user.uid,
-          sets: sessionStats.sets
-        });
-      }
-
-      // Update workout session in Firestore
-      const sessionsQuery = query(
-        collection(db, 'workoutSessions'),
-        where('userId', '==', user.uid),
-        where('status', '==', 'active'),
-        orderBy('startTime', 'desc'),
-        limit(1)
-      );
-      
-      const snapshot = await getDocs(sessionsQuery);
-      if (!snapshot.empty) {
-        const sessionDoc = snapshot.docs[0];
-        await updateDoc(sessionDoc.ref, {
-          endTime: serverTimestamp(),
-          status: 'completed',
-          totalReps: sessionStats.reps,
-          caloriesBurned: sessionStats.calories,
-          averageCorrectness: sessionStats.correctness,
-          duration: sessionStats.duration
-        });
-
-        // Update user progress
-        await updateUserProgress();
-      }
-
-      // Reset states
-      setRealTimeFeedback([]);
-      setSessionStats(prev => ({ ...prev, reps: 0, duration: 0, correctness: 0 }));
-
-    } catch (error) {
-      console.error('Error ending session:', error);
-      setError('Failed to save workout session.');
-    }
-
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
-  };
-
-  const sendVideoFrames = () => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    let frameCount = 0;
-    
-    const captureFrame = () => {
-      if (!isRecording || !videoRef.current || videoRef.current.paused || !videoRef.current.videoWidth) {
-        return;
-      }
-
-      try {
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        
-        // Convert to base64 for transmission
-        const frameData = canvas.toDataURL('image/jpeg', 0.7);
-        
-        if (socketRef.current && socketRef.current.connected) {
-          socketRef.current.emit('video_frame', {
-            frame: frameData,
-            timestamp: Date.now(),
-            frameCount: frameCount++
-          });
-        }
-
-        animationRef.current = requestAnimationFrame(captureFrame);
-      } catch (error) {
-        console.error('Error capturing frame:', error);
-      }
-    };
-
-    captureFrame();
-  };
-
   const updateUserProgress = async () => {
     try {
       const userDocRef = doc(db, 'users', user.uid);
       
       await updateDoc(userDocRef, {
         workoutsCompleted: (progressData.workoutsCompleted || 0) + 1,
-        caloriesBurned: (progressData.caloriesBurned || 0) + sessionStats.calories,
+        caloriesBurned: (progressData.caloriesBurned || 0) + sessionData.calories,
         lastWorkoutDate: serverTimestamp(),
         streak: calculateStreak(progressData.lastWorkoutDate, progressData.streak || 0),
         workoutHistory: arrayUnion({
           type: selectedExercise,
           date: serverTimestamp(),
-          reps: sessionStats.reps,
-          calories: sessionStats.calories,
-          correctness: sessionStats.correctness,
-          duration: sessionStats.duration
+          reps: sessionData.reps,
+          calories: sessionData.calories,
+          correctness: sessionData.accuracy,
+          duration: sessionData.duration,
+          guidanceMessages: sessionData.guidanceMessages,
+          weakAreas: sessionData.weakAreas
         })
       });
 
@@ -536,71 +500,62 @@ const WorkoutPage = () => {
   };
 
   const analyzeUploadedVideo = async () => {
-  if (!uploadedVideo || !selectedExercise) {
-    setError('Please select a video and exercise type');
-    return;
-  }
-
-  setIsAnalyzing(true);
-  setError('');
-
-  try {
-    // For now, we'll simulate analysis since we don't have actual video processing
-    // In production, you'd send the video to your backend for processing
-    
-    const simulatedAnalysis = {
-      timestamp: new Date(),
-      exerciseType: selectedExercise,
-      correctnessScore: 0.75 + Math.random() * 0.2,
-      feedback: [
-        "✅ Video analysis complete!",
-        "📊 Detected 12 reps with good form",
-        "💡 Suggestion: Maintain consistent tempo",
-        "🎯 Focus on keeping core engaged",
-        "Overall: Great workout! 💪"
-      ],
-      repCount: Math.floor(Math.random() * 15) + 8,
-      riskLevel: 'low',
-      duration: Math.floor(Math.random() * 120) + 60,
-      summary: {
-        totalReps: Math.floor(Math.random() * 15) + 8,
-        goodReps: Math.floor(Math.random() * 12) + 5,
-        badReps: Math.floor(Math.random() * 3),
-        improvements: ["Work on depth", "Maintain consistent form"]
-      }
-    };
-
-    setVideoAnalysis(simulatedAnalysis);
-    console.log('✅ Video analysis complete:', simulatedAnalysis);
-    
-    // Save to Firebase
-    if (user) {
-      const videoSessionRef = doc(collection(db, 'videoSessions'));
-      await setDoc(videoSessionRef, {
-        id: videoSessionRef.id,
-        userId: user.uid,
-        exerciseType: selectedExercise,
-        videoName: uploadedVideo.name,
-        analysis: simulatedAnalysis,
-        createdAt: serverTimestamp()
-      });
+    if (!uploadedVideo || !selectedExercise) {
+      setError('Please select a video and exercise type');
+      return;
     }
-    
-  } catch (error) {
-    console.error('❌ Video analysis error:', error);
-    setError(`Video analysis failed: ${error.message}`);
-  } finally {
-    setIsAnalyzing(false);
-  }
-};
 
-  const convertVideoToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = error => reject(error);
-    });
+    setIsVideoAnalyzing(true);
+    setError('');
+
+    try {
+      // For now, we'll simulate analysis since we don't have actual video processing
+      // In production, you'd send the video to your backend for processing
+      
+      const simulatedAnalysis = {
+        timestamp: new Date(),
+        exerciseType: selectedExercise,
+        correctnessScore: 0.75 + Math.random() * 0.2,
+        feedback: [
+          "✅ Video analysis complete!",
+          "📊 Detected 12 reps with good form",
+          "💡 Suggestion: Maintain consistent tempo",
+          "🎯 Focus on keeping core engaged",
+          "Overall: Great workout! 💪"
+        ],
+        repCount: Math.floor(Math.random() * 15) + 8,
+        riskLevel: 'low',
+        duration: Math.floor(Math.random() * 120) + 60,
+        summary: {
+          totalReps: Math.floor(Math.random() * 15) + 8,
+          goodReps: Math.floor(Math.random() * 12) + 5,
+          badReps: Math.floor(Math.random() * 3),
+          improvements: ["Work on depth", "Maintain consistent form"]
+        }
+      };
+
+      setVideoAnalysis(simulatedAnalysis);
+      console.log('✅ Video analysis complete:', simulatedAnalysis);
+      
+      // Save to Firebase
+      if (user) {
+        const videoSessionRef = doc(collection(db, 'videoSessions'));
+        await setDoc(videoSessionRef, {
+          id: videoSessionRef.id,
+          userId: user.uid,
+          exerciseType: selectedExercise,
+          videoName: uploadedVideo.name,
+          analysis: simulatedAnalysis,
+          createdAt: serverTimestamp()
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Video analysis error:', error);
+      setError(`Video analysis failed: ${error.message}`);
+    } finally {
+      setIsVideoAnalyzing(false);
+    }
   };
 
   const resetVideoUpload = () => {
@@ -832,12 +787,12 @@ const WorkoutPage = () => {
                 {uploadedVideo && !videoAnalysis && (
                   <motion.button
                     onClick={analyzeUploadedVideo}
-                    disabled={isAnalyzing}
+                    disabled={isVideoAnalyzing}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     className="px-6 py-3 bg-gradient-to-r from-green-600 to-cyan-600 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isAnalyzing ? (
+                    {isVideoAnalyzing ? (
                       <span className="flex items-center">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                         Analyzing...
@@ -884,13 +839,13 @@ const WorkoutPage = () => {
       {/* Camera Debug Info */}
       {isRecording && (
         <div className="fixed top-4 left-4 z-50 bg-blue-900/90 border border-blue-500 rounded-lg p-4 max-w-sm">
-          <h4 className="font-bold text-blue-300 mb-2">Camera Debug</h4>
+          <h4 className="font-bold text-blue-300 mb-2">AI Analysis Debug</h4>
           <div className="text-sm">
+            <p>AI Status: {isAnalyzing ? '✅ Analyzing' : '❌ Idle'}</p>
             <p>Video Ready: {videoRef.current?.readyState === 4 ? '✅' : '❌'}</p>
-            <p>Video Playing: {!videoRef.current?.paused ? '✅' : '❌'}</p>
-            <p>Stream Active: {streamRef.current?.active ? '✅' : '❌'}</p>
-            <p>Video Width: {videoRef.current?.videoWidth || 0}</p>
-            <p>Video Height: {videoRef.current?.videoHeight || 0}</p>
+            <p>Detector: {detector ? '✅ Loaded' : '❌ Loading'}</p>
+            <p>Reps: {sessionData.reps}</p>
+            <p>Accuracy: {sessionData.accuracy}%</p>
           </div>
         </div>
       )}
@@ -904,17 +859,17 @@ const WorkoutPage = () => {
               <div className="lg:col-span-2">
                 <div className="bg-gray-800 rounded-lg p-4">
                   <div className="relative">
-                    <div className="bg-green-600 text-white px-4 py-2 rounded-t-lg flex justify-between items-center">
-                      <span className="font-bold">🎯 LIVE WORKOUT - {selectedExercise.toUpperCase()}</span>
+                    <div className="bg-gradient-to-r from-cyan-600 to-purple-600 text-white px-4 py-2 rounded-t-lg flex justify-between items-center">
+                      <span className="font-bold">🤖 AI WORKOUT - {selectedExercise.toUpperCase()}</span>
                       <span className="text-sm">
-                        {sessionStats.duration > 0 
-                          ? `Duration: ${Math.floor(sessionStats.duration / 60)}:${(sessionStats.duration % 60).toString().padStart(2, '0')}`
+                        {sessionData.duration > 0 
+                          ? `Duration: ${Math.floor(sessionData.duration / 60)}:${(sessionData.duration % 60).toString().padStart(2, '0')}`
                           : 'Starting...'
                         }
                       </span>
                     </div>
                     
-                    {/* Video Container with Fallback */}
+                    {/* Video Container with AI Analysis */}
                     <div className="relative bg-black rounded-b-lg min-h-[400px] flex items-center justify-center">
                       <video
                         ref={videoRef}
@@ -926,6 +881,14 @@ const WorkoutPage = () => {
                         onCanPlay={() => console.log('✅ Video can play')}
                         onPlay={() => console.log('🎥 Video started playing')}
                         onError={(e) => console.error('❌ Video error:', e)}
+                      />
+                      
+                      {/* AI Pose Canvas Overlay */}
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute top-0 left-0 w-full h-full rounded-b-lg"
+                        width={640}
+                        height={480}
                       />
                       
                       {/* Fallback if video doesn't load */}
@@ -942,12 +905,6 @@ const WorkoutPage = () => {
                           </button>
                         </div>
                       )}
-                      
-                      <PoseCanvas 
-                        videoRef={videoRef}
-                        feedback={realTimeFeedback[0]}
-                        isVisible={isRecording}
-                      />
                     </div>
                   </div>
                   
@@ -967,7 +924,7 @@ const WorkoutPage = () => {
                     
                     <div className="flex-1 text-center">
                       <span className="text-cyan-300 font-semibold">
-                        {sessionStarted ? '✅ Session Active' : '🔄 Starting...'}
+                        {isAnalyzing ? '🤖 AI Analyzing...' : '🔄 Starting AI...'}
                       </span>
                     </div>
                     
@@ -983,8 +940,22 @@ const WorkoutPage = () => {
 
               {/* Sidebar */}
               <div className="space-y-6">
-                <SessionStats stats={sessionStats} />
-                <FeedbackPanel feedback={realTimeFeedback} />
+                <SessionStats stats={{
+                  reps: sessionData.reps,
+                  sets: sessionData.sets,
+                  calories: sessionData.calories,
+                  duration: sessionData.duration,
+                  correctness: sessionData.accuracy
+                }} />
+                <FeedbackPanel 
+                  feedback={sessionData.guidanceMessages?.map((message, index) => ({
+                    message,
+                    correctness: sessionData.accuracy,
+                    timestamp: Date.now() - index * 1000
+                  })) || []}
+                  weakAreas={sessionData.weakAreas}
+                  accuracy={sessionData.accuracy}
+                />
               </div>
             </div>
           </div>
@@ -1004,7 +975,7 @@ const WorkoutPage = () => {
             transition={{ duration: 0.8 }}
             className="text-5xl md:text-7xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500"
           >
-            TRANSFORM YOUR REALITY
+            AI FITNESS COACH
           </motion.h1>
           
           <motion.p 
@@ -1013,7 +984,7 @@ const WorkoutPage = () => {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-xl md:text-2xl mb-10 max-w-3xl mx-auto text-cyan-200"
           >
-            AI-powered fitness coaching with real-time form analysis and guidance
+            Real-time pose detection, form analysis, and personalized guidance
           </motion.p>
           
           {/* Start Workout Button */}
@@ -1025,11 +996,11 @@ const WorkoutPage = () => {
             whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(34, 211, 238, 0.5)" }}
             className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-lg text-xl font-bold shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 transition-all duration-300 mb-4"
           >
-            🏋️ START AI WORKOUT
+            🤖 START AI WORKOUT
           </motion.button>
           
           <div className="text-cyan-300 text-sm">
-            💡 Make sure your backend server is running on port 5000
+            💡 AI-powered real-time form analysis with pose detection
           </div>
         </div>
       </section>
@@ -1041,7 +1012,7 @@ const WorkoutPage = () => {
       <section className="py-16 px-4 md:px-8">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold mb-12 text-center bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-cyan-400">
-            WORKOUT CATEGORIES
+            AI WORKOUT CATEGORIES
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -1063,7 +1034,7 @@ const WorkoutPage = () => {
                   <h3 className="text-xl font-bold mb-2 text-cyan-300 text-center">{category.name}</h3>
                   <p className="text-gray-300 text-sm text-center">{category.description}</p>
                   <div className="mt-4 text-center">
-                    <span className="text-cyan-400 text-sm">Click to start</span>
+                    <span className="text-cyan-400 text-sm">AI Analysis Available</span>
                   </div>
                 </motion.div>
               ))
@@ -1071,15 +1042,21 @@ const WorkoutPage = () => {
               <div className="col-span-full text-center py-8">
                 <p className="text-gray-400">No workout categories found. Using default exercises.</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                  {['Push-ups', 'Squats', 'Lunges', 'Plank'].map((exercise, index) => (
+                  {[
+                    { name: 'Push-ups', icon: '💪', type: 'pushup' },
+                    { name: 'Squats', icon: '🦵', type: 'squat' },
+                    { name: 'Lunges', icon: '🚶', type: 'lunge' },
+                    { name: 'Plank', icon: '🧘', type: 'plank' }
+                  ].map((exercise, index) => (
                     <motion.div
-                      key={exercise}
+                      key={exercise.name}
                       whileHover={{ scale: 1.05 }}
                       className="bg-gray-800/50 rounded-lg p-4 border border-cyan-500/30 cursor-pointer"
-                      onClick={() => startSession(exercise)}
+                      onClick={() => startSession(exercise.type)}
                     >
-                      <div className="text-2xl mb-2">{exercise === 'Push-ups' ? '💪' : exercise === 'Squats' ? '🦵' : exercise === 'Lunges' ? '🚶' : '🧘'}</div>
-                      <p className="text-cyan-300 font-semibold">{exercise}</p>
+                      <div className="text-2xl mb-2">{exercise.icon}</div>
+                      <p className="text-cyan-300 font-semibold">{exercise.name}</p>
+                      <p className="text-green-400 text-xs mt-1">AI Enabled</p>
                     </motion.div>
                   ))}
                 </div>
@@ -1093,7 +1070,7 @@ const WorkoutPage = () => {
       <section className="py-16 px-4 md:px-8 bg-gray-800/30">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold mb-12 text-center bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-pink-500">
-            YOUR PROGRESS
+            YOUR AI PROGRESS
           </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1102,11 +1079,11 @@ const WorkoutPage = () => {
               className="bg-gray-800/50 backdrop-blur-md rounded-xl p-6 border border-cyan-500/30 hover:border-cyan-400/50 transition-all duration-300"
             >
               <div className="text-4xl mb-4 text-cyan-400">🎯</div>
-              <h3 className="text-xl font-bold mb-4 text-cyan-300">Workouts Completed</h3>
+              <h3 className="text-xl font-bold mb-4 text-cyan-300">AI Workouts Completed</h3>
               <div className="text-5xl font-bold text-center text-white mb-2">
                 {progressData.workoutsCompleted}
               </div>
-              <p className="text-center text-cyan-200 text-sm">Keep the momentum going!</p>
+              <p className="text-center text-cyan-200 text-sm">AI-powered sessions</p>
             </motion.div>
 
             <motion.div 
@@ -1114,23 +1091,23 @@ const WorkoutPage = () => {
               className="bg-gray-800/50 backdrop-blur-md rounded-xl p-6 border border-pink-500/30 hover:border-pink-400/50 transition-all duration-300"
             >
               <div className="text-4xl mb-4 text-pink-400">🔥</div>
-              <h3 className="text-xl font-bold mb-4 text-pink-300">Current Streak</h3>
+              <h3 className="text-xl font-bold mb-4 text-pink-300">AI Streak</h3>
               <div className="text-5xl font-bold text-center text-white mb-2">
                 {progressData.streak} days
               </div>
-              <p className="text-center text-pink-200 text-sm">Don't break the chain!</p>
+              <p className="text-center text-pink-200 text-sm">AI-guided consistency</p>
             </motion.div>
 
             <motion.div 
               whileHover={{ scale: 1.05 }}
               className="bg-gray-800/50 backdrop-blur-md rounded-xl p-6 border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300"
             >
-              <div className="text-4xl mb-4 text-purple-400">⚡</div>
-              <h3 className="text-xl font-bold mb-4 text-purple-300">Calories Burned</h3>
+              <div className="text-4xl mb-4 text-purple-400">🤖</div>
+              <h3 className="text-xl font-bold mb-4 text-purple-300">AI Accuracy</h3>
               <div className="text-5xl font-bold text-center text-white mb-2">
-                {progressData.caloriesBurned}
+                {sessionData.accuracy || 0}%
               </div>
-              <p className="text-center text-purple-200 text-sm">Energy transformed!</p>
+              <p className="text-center text-purple-200 text-sm">Form perfection score</p>
             </motion.div>
           </div>
         </div>
@@ -1147,7 +1124,7 @@ const WorkoutPage = () => {
             />
             <div>
               <p className="text-sm text-cyan-300">{user.displayName || 'User'}</p>
-              <p className="text-xs text-gray-400">Streak: {progressData.streak} days</p>
+              <p className="text-xs text-gray-400">AI Streak: {progressData.streak} days</p>
             </div>
             <button 
               onClick={handleLogout}

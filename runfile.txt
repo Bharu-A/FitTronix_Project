@@ -1,6 +1,7 @@
 cd fittronix-admin
 npm start
 
+cd backend
 npm run dev 
 
 bharu74835@gmail.com
