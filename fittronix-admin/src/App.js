@@ -24,7 +24,12 @@ import PrivacyPolicy from "./pages/footerPages/PrivacyPolicy";
 import About from "./pages/footerPages/About";
 import Blog from "./pages/footerPages/Blog";
 import FAQ from "./pages/footerPages/FAQ";
+import FitTronixSubscriptions from "./pages/FitTronixSubscriptions";
 import RequireAdmin from "./components/RequireAdmin";
+import FitTronixProPlan from "./components/subscribe/FitTronixProPlan";
+import FitTronixElitePlan from "./components/subscribe/FitTronixElitePlan";
+import FitTronixOnboarding from "./pages/FitTronixOnboarding";
+
 
 
 function Layout({ children }) {
@@ -95,6 +100,10 @@ function App() {
           <Route path="/privacyPolicy" element={<PrivacyPolicy />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/faq" element={<FAQ />} />
+          <Route path="/fitronixSubscriptions" element={<FitTronixSubscriptions />} />
+          <Route path="/fitronixElitePlan" element={<FitTronixElitePlan />} />
+          <Route path="/fitronixProPlan" element={<FitTronixProPlan />} />
+          <Route path="/fitronixOnboarding" element={<FitTronixOnboarding />} />
           <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboardPage/></RequireAdmin>} />
 
         </Routes>

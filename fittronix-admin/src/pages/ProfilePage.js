@@ -83,6 +83,13 @@ function useFirebaseUser() {
                 workoutTimePreference: "",
                 fitnessMotivation: "",
                 
+                // Membership Information
+                membership: {
+                  status: "inactive",
+                  plan: "Free",
+                  expiryDate: null
+                },
+                
                 // System Fields
                 profileCompleted: false,
                 joined: new Date().toISOString().split('T')[0],
@@ -208,27 +215,32 @@ function useFirebaseUser() {
       return { success: false, error: err.message };
     }
   };
+const combinedUser = React.useMemo(() => {
+  if (!user) return null;
+  return profileData ? { ...user, ...profileData } : user;
+}, [user, profileData]);
 
-  return { 
-    user: user ? { ...user, ...profileData } : null, 
-    loading, 
-    error, 
-    updateUserData,
-    workoutHistory,
-    stats,
-    refreshWorkouts: (userId) => fetchWorkoutHistory(userId)
-  };
+ return {
+  user: combinedUser,
+  loading,
+  error,
+  updateUserData,
+  workoutHistory,
+  stats,
+  refreshWorkouts: (userId) => fetchWorkoutHistory(userId)
+};
+
 }
 
 // Cyber Loading Skeleton Component
 function ProfileSkeleton() {
   return (
-    <div className="p-6 space-y-6 bg-gray-900 min-h-screen">
+    <div className="p-6 space-y-6 bg-gray-900 min-h-screen  ">
       <div className="animate-pulse space-y-6">
         <div className="h-8 bg-gray-800 rounded w-1/4"></div>
         <div className="h-4 bg-gray-800 rounded w-1/2"></div>
         
-        <div className="bg-gray-800/50 backdrop-blur-md rounded-2xl border border-cyan-500/20 p-6 space-y-6">
+        <div className="bg-gray-800/50 backdrop-blur-md rounded-2xl border border-cyan-500/20 p-6 space-y-6 ">
           {/* Profile Header Skeleton */}
           <div className="flex items-center space-x-4">
             <div className="w-20 h-20 bg-gray-800 rounded-full"></div>
@@ -273,13 +285,13 @@ function StatsCharts({ stats }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6  ">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Card className="bg-gray-800/50 backdrop-blur-md border border-purple-500/30 hover:border-purple-500/50 transition-all duration-300">
+        <Card className="bg-gray-800/50 backdrop-blur-md border border-purple-500/30 hover:border-purple-500/50 transition-all duration-300 ">
           <CardContent className="p-4">
             <h4 className="font-semibold mb-4 text-cyan-300">CALORIES BURNED</h4>
             <ResponsiveContainer width="100%" height={200}>
@@ -479,7 +491,8 @@ function ProfilePage() {
         dietaryPreferences: user.dietaryPreferences || "",
         workoutTimePreference: user.workoutTimePreference || "",
         fitnessMotivation: user.fitnessMotivation || "",
-        photoURL: user.photoURL || ""
+        photoURL: user.photoURL || "",
+        membership: user.membership || { status: "inactive", plan: "Free", expiryDate: null }
       });
     }
   }, [user, isEditing]);
@@ -522,7 +535,8 @@ function ProfilePage() {
         dietaryPreferences: user.dietaryPreferences || "",
         workoutTimePreference: user.workoutTimePreference || "",
         fitnessMotivation: user.fitnessMotivation || "",
-        photoURL: user.photoURL || ""
+        photoURL: user.photoURL || "",
+        membership: user.membership || { status: "inactive", plan: "Free", expiryDate: null }
       });
     }
     setIsEditing(false);
@@ -654,197 +668,191 @@ function ProfilePage() {
   }
 
   return (
-    <div className="p-6 pt-[50px] space-y-6 bg-gray-900 min-h-screen">
+    <div className="p-6 pt-[90px] space-y-6 bg-gray-900 min-h-screen">
       {/* Header */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex justify-between items-center"
-      >
-        <div>
-          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500">
-            PROFILE MATRIX
-          </h1>
-          <p className="text-gray-400">Manage your personal details & fitness goals</p>
-        </div>
-        {!isEditing ? (
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button 
-              onClick={() => setIsEditing(true)}
-              className="flex items-center space-x-2 bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 transition-all duration-300"
+      <motion.div
+  initial={{ opacity: 0, y: 20 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ delay: 0.1 }}
+>
+  <Card className="
+      rounded-2xl 
+      bg-[#0f0f0f]               /* PURE MATTE BLACK */
+      border border-neutral-800   /* THIN GRAY BORDER */
+      shadow-[0_0_20px_-5px_rgba(0,0,0,0.7)] /* Soft dark shadow */
+      hover:shadow-[0_0_25px_-5px_rgba(0,0,0,0.8)]
+      transition-all duration-300 
+      backdrop-blur
+    ">
+    <CardContent className="p-6">
+
+      {/* Profile Header */}
+      <div className="flex items-center space-x-4 mb-8">
+        <div className="relative">
+          {editForm.photoURL ? (
+            <motion.img
+              whileHover={{ scale: 1.03 }}
+              src={editForm.photoURL}
+              alt={editForm.name}
+              className="
+                w-20 h-20 rounded-full object-cover
+                border border-neutral-700           /* Minimal thin border */
+                shadow-[0_0_20px_rgba(0,0,0,0.6)]   /* Dark subtle shadow */
+              "
+            />
+          ) : (
+            <motion.div
+              whileHover={{ scale: 1.03 }}
+              className="
+                w-20 h-20 rounded-full
+                bg-neutral-800                      /* Matte circle */
+                flex items-center justify-center
+                text-3xl text-neutral-300 font-semibold
+                border border-neutral-600
+                shadow-[0_0_20px_rgba(0,0,0,0.5)]
+              "
             >
-              <Edit size={16} />
-              <span>Edit Profile</span>
-            </Button>
-          </motion.div>
-        ) : (
-          <div className="flex space-x-2">
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
-                onClick={handleSave}
-                className="flex items-center space-x-2 bg-gradient-to-r from-green-600 to-cyan-600 hover:from-green-700 hover:to-cyan-700 shadow-lg shadow-green-500/30 hover:shadow-green-500/50 transition-all duration-300"
-                disabled={uploading || saveStatus.loading}
+              {editForm.name ? editForm.name.charAt(0).toUpperCase() : "U"}
+            </motion.div>
+          )}
+
+          {/* Upload buttons (minimal) */}
+          {isEditing && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="absolute -bottom-2 -right-2 flex space-x-2"
+            >
+              {/* Upload Button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="
+                  p-2 rounded-full 
+                  bg-neutral-900/80 
+                  border border-neutral-700
+                  text-neutral-200
+                  hover:bg-neutral-800
+                  transition
+                "
+                disabled={uploading}
               >
-                {uploading || saveStatus.loading ? (
+                {uploading ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
-                  <Save size={16} />
+                  <Camera size={16} />
                 )}
-                <span>{uploading || saveStatus.loading ? "SYNCING..." : "SAVE DATA"}</span>
-              </Button>
+              </button>
+
+              {/* Remove Button */}
+              {editForm.photoURL && (
+                <button
+                  onClick={handleRemovePhoto}
+                  className="
+                    p-2 rounded-full 
+                    bg-neutral-900/80 
+                    border border-neutral-700
+                    text-neutral-200
+                    hover:bg-neutral-800
+                    transition
+                  "
+                  disabled={uploading}
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                className="hidden"
+              />
             </motion.div>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button 
-                onClick={handleCancel}
-                variant="outline"
-                className="flex items-center space-x-2 border-pink-500/50 text-pink-400 hover:bg-pink-500/10 hover:border-pink-500 hover:text-pink-300 transition-all duration-300"
-                disabled={uploading || saveStatus.loading}
-              >
-                <X size={16} />
-                <span>CANCEL</span>
-              </Button>
-            </motion.div>
-          </div>
-        )}
-      </motion.div>
+          )}
+        </div>
 
-      {/* Status Messages */}
-      <AnimatePresence>
-        {saveStatus.error && (
-          <motion.div
-            initial={{ opacity: 0, x: -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 100 }}
-            className="bg-red-900/90 border border-red-500 text-red-200 px-4 py-3 rounded-lg backdrop-blur-md flex items-center"
-          >
-            <AlertCircle size={16} className="mr-2" />
-            Error: {saveStatus.error}
-          </motion.div>
-        )}
+        {/* Name + Level */}
+        <div className="flex-1">
+          {isEditing ? (
+            <CyberInput
+              value={editForm.name}
+              onChange={(e) => handleInputChange("name", e.target.value)}
+              placeholder="Your Name"
+              className="text-2xl font-semibold bg-neutral-900 border-neutral-700 text-neutral-200"
+            />
+          ) : (
+            <>
+              <h2 className="text-2xl font-semibold text-neutral-200">
+                {user.displayName || user.name}
+              </h2>
+              <p className="text-neutral-400 text-sm">
+                {user.currentFitnessLevel || "Fitness Enthusiast"}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
 
-        {saveStatus.success && (
-          <motion.div
-            initial={{ opacity: 0, x: -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 100 }}
-            className="bg-green-900/90 border border-green-500 text-green-200 px-4 py-3 rounded-lg backdrop-blur-md flex items-center"
-          >
-            <CheckCircle size={16} className="mr-2" />
-            {typeof saveStatus.success === 'string' ? saveStatus.success : "Profile updated successfully!"}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Main Profile Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+      {/* Tabs section */}
+      <Tabs 
+        value={activeTab} 
+        onValueChange={setActiveTab} 
+        className="space-y-6"
       >
-        <Card className="rounded-2xl bg-gray-800/50 backdrop-blur-md border border-cyan-500/20 shadow-2xl shadow-cyan-500/10 hover:shadow-cyan-500/20 transition-all duration-500">
-          <CardContent className="p-6">
-            {/* Profile Header with Photo */}
-            <div className="flex items-center space-x-4 mb-6">
-              <div className="relative">
-                {editForm.photoURL ? (
-                  <motion.img 
-                    whileHover={{ scale: 1.05 }}
-                    src={editForm.photoURL} 
-                    alt={editForm.name || "User"} 
-                    className="w-20 h-20 rounded-full object-cover border-2 border-cyan-500 shadow-lg shadow-cyan-500/30"
-                  />
-                ) : (
-                  <motion.div 
-                    whileHover={{ scale: 1.05 }}
-                    className="w-20 h-20 bg-gradient-to-br from-cyan-600 to-purple-600 rounded-full flex items-center justify-center text-3xl font-bold text-white shadow-lg shadow-cyan-500/30"
-                  >
-                    {editForm.name ? editForm.name.charAt(0).toUpperCase() : "U"}
-                  </motion.div>
-                )}
-                
-                {isEditing && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute -bottom-2 -right-2 flex space-x-1"
-                  >
-                    <motion.button 
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => fileInputRef.current?.click()}
-                      className="bg-gradient-to-r from-cyan-600 to-purple-600 text-white p-2 rounded-full shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50 transition-all duration-300"
-                      disabled={uploading}
-                    >
-                      {uploading ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      ) : (
-                        <Camera size={16} />
-                      )}
-                    </motion.button>
-                    
-                    {editForm.photoURL && (
-                      <motion.button 
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={handleRemovePhoto}
-                        className="bg-gradient-to-r from-pink-600 to-red-600 text-white p-2 rounded-full shadow-lg shadow-pink-500/30 hover:shadow-pink-500/50 transition-all duration-300"
-                        disabled={uploading}
-                      >
-                        <Trash2 size={16} />
-                      </motion.button>
-                    )}
-                    
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleImageUpload}
-                      accept="image/*"
-                      className="hidden"
-                      disabled={uploading}
-                    />
-                  </motion.div>
-                )}
-              </div>
-              <div className="flex-1">
-                {isEditing ? (
-                  <CyberInput
-                    value={editForm.name}
-                    onChange={(e) => handleInputChange("name", e.target.value)}
-                    placeholder="Your Name"
-                    className="text-2xl font-semibold"
-                  />
-                ) : (
-                  <>
-                    <h2 className="text-2xl font-semibold text-cyan-100">{user.displayName || user.name || "Unknown User"}</h2>
-                    <p className="text-cyan-400 flex items-center">
-                      <Award size={16} className="mr-1" />
-                      {user.currentFitnessLevel || "Fitness Enthusiast"}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
+        <TabsList
+          className="
+            grid grid-cols-4 
+            bg-neutral-900 
+            border border-neutral-800 
+            rounded-lg p-1
+          "
+        >
+          <TabsTrigger 
+            value="personal"
+            className="
+              text-neutral-400 
+              data-[state=active]:bg-neutral-800 
+              data-[state=active]:text-neutral-200
+            "
+          >
+            <User size={16} className="mr-2" /> Personal
+          </TabsTrigger>
 
-            {/* Tabs for different sections */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-              <TabsList className="grid w-full grid-cols-4 bg-gray-800/50 backdrop-blur-md border border-cyan-500/20 p-1 rounded-lg">
-                <TabsTrigger value="personal" className="text-cyan-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-600 data-[state=active]:to-purple-600 data-[state=active]:text-white">
-                  <User size={16} className="mr-2" />
-                  Personal
-                </TabsTrigger>
-                <TabsTrigger value="fitness" className="text-purple-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-600 data-[state=active]:to-pink-600 data-[state=active]:text-white">
-                  <Dumbbell size={16} className="mr-2" />
-                  Fitness
-                </TabsTrigger>
-                <TabsTrigger value="health" className="text-pink-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-600 data-[state=active]:to-red-600 data-[state=active]:text-white">
-                  <Heart size={16} className="mr-2" />
-                  Health
-                </TabsTrigger>
-                <TabsTrigger value="stats" className="text-green-300 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-600 data-[state=active]:to-cyan-600 data-[state=active]:text-white">
-                  <Activity size={16} className="mr-2" />
-                  Stats
-                </TabsTrigger>
-              </TabsList>
+          <TabsTrigger 
+            value="fitness"
+            className="
+              text-neutral-400 
+              data-[state=active]:bg-neutral-800 
+              data-[state=active]:text-neutral-200
+            "
+          >
+            <Dumbbell size={16} className="mr-2" /> Fitness
+          </TabsTrigger>
+
+          <TabsTrigger 
+            value="health"
+            className="
+              text-neutral-400 
+              data-[state=active]:bg-neutral-800 
+              data-[state=active]:text-neutral-200
+            "
+          >
+            <Heart size={16} className="mr-2" /> Health
+          </TabsTrigger>
+
+          <TabsTrigger 
+            value="stats"
+            className="
+              text-neutral-400 
+              data-[state=active]:bg-neutral-800 
+              data-[state=active]:text-neutral-200
+            "
+          >
+            <Activity size={16} className="mr-2" /> Stats
+          </TabsTrigger>
+        </TabsList>
+
 
               {/* Personal Information Tab */}
               <TabsContent value="personal" className="space-y-6">
@@ -1066,3 +1074,4 @@ function ProfilePage() {
 }
 
 export default ProfilePage;
+

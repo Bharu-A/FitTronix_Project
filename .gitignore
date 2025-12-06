@@ -1,0 +1,5 @@
+node_modules
+backend.zip
+tests/*.mp4
+tests/frame_*.jpg
+*.zip
