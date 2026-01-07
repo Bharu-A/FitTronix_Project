@@ -4,8 +4,8 @@ import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { 
-  User, Mail, Phone, Calendar, MapPin, Dumbbell, 
+import {
+  User, Mail, Phone, Calendar, MapPin, Dumbbell,
   Edit, Save, X, Camera, Award, Activity, Upload, Trash2,
   Ruler, Scale, Heart, Target, Clock, Flame, TrendingUp,
   AlertCircle, CheckCircle, Zap, Cpu, Rocket
@@ -33,19 +33,19 @@ function useFirebaseUser() {
       try {
         setLoading(true);
         setError(null);
-        
+
         if (firebaseUser) {
           setUser(firebaseUser);
-          
+
           // Fetch additional profile data from Firestore
           try {
             const docRef = doc(db, "users", firebaseUser.uid);
             const docSnap = await getDoc(docRef);
-            
+
             if (docSnap.exists()) {
               const userData = docSnap.data();
               setProfileData(userData);
-              
+
               // Fetch workout history
               await fetchWorkoutHistory(firebaseUser.uid);
               await calculateUserStats(firebaseUser.uid, userData);
@@ -58,12 +58,12 @@ function useFirebaseUser() {
                 phone: "",
                 dob: "",
                 location: "",
-                
+
                 // Physical Attributes
                 height: "",
                 weight: "",
                 gender: "",
-                
+
                 // Fitness Information
                 fitnessGoal: "",
                 activityLevel: "",
@@ -71,32 +71,32 @@ function useFirebaseUser() {
                 currentFitnessLevel: "",
                 preferredWorkoutTypes: [],
                 workoutFrequency: "",
-                
+
                 // Health Information
                 medicalConditions: "",
                 injuries: "",
                 allergies: "",
                 emergencyContact: "",
-                
+
                 // Preferences
                 dietaryPreferences: "",
                 workoutTimePreference: "",
                 fitnessMotivation: "",
-                
+
                 // Membership Information
                 membership: {
                   status: "inactive",
                   plan: "Free",
                   expiryDate: null
                 },
-                
+
                 // System Fields
                 profileCompleted: false,
                 joined: new Date().toISOString().split('T')[0],
                 lastUpdated: new Date().toISOString(),
                 photoURL: firebaseUser.photoURL || ""
               };
-              
+
               await setDoc(docRef, comprehensiveProfile);
               setProfileData(comprehensiveProfile);
             }
@@ -142,11 +142,11 @@ function useFirebaseUser() {
       const q = query(workoutsRef, orderBy("date", "desc"), limit(30));
       const querySnapshot = await getDocs(q);
       const workouts = querySnapshot.docs.map(doc => doc.data());
-      
+
       const totalWorkouts = workouts.length;
       const totalCalories = workouts.reduce((sum, workout) => sum + (workout.calories || 0), 0);
       const uniqueDays = new Set(workouts.map(w => w.date?.split('T')[0])).size;
-      
+
       // Calculate progress percentage based on goal
       let progressPercentage = 0;
       if (userData.targetWeight && userData.weight) {
@@ -175,7 +175,7 @@ function useFirebaseUser() {
     try {
       const auth = getAuth();
       const user = auth.currentUser;
-      
+
       if (!user) {
         throw new Error("No user logged in");
       }
@@ -188,7 +188,7 @@ function useFirebaseUser() {
       if (updatedData.photoURL && updatedData.photoURL !== user.photoURL) {
         authUpdates.photoURL = updatedData.photoURL;
       }
-      
+
       if (Object.keys(authUpdates).length > 0) {
         await updateProfile(user, authUpdates);
       }
@@ -203,11 +203,11 @@ function useFirebaseUser() {
       // Update Firestore data
       const docRef = doc(db, "users", user.uid);
       await updateDoc(docRef, dataWithTimestamp);
-      
+
       // Update local state
       setProfileData(prev => ({ ...prev, ...dataWithTimestamp }));
       setUser(prev => prev ? { ...prev, ...authUpdates } : null);
-      
+
       return { success: true };
     } catch (err) {
       setError(err.message);
@@ -215,20 +215,20 @@ function useFirebaseUser() {
       return { success: false, error: err.message };
     }
   };
-const combinedUser = React.useMemo(() => {
-  if (!user) return null;
-  return profileData ? { ...user, ...profileData } : user;
-}, [user, profileData]);
+  const combinedUser = React.useMemo(() => {
+    if (!user) return null;
+    return profileData ? { ...user, ...profileData } : user;
+  }, [user, profileData]);
 
- return {
-  user: combinedUser,
-  loading,
-  error,
-  updateUserData,
-  workoutHistory,
-  stats,
-  refreshWorkouts: (userId) => fetchWorkoutHistory(userId)
-};
+  return {
+    user: combinedUser,
+    loading,
+    error,
+    updateUserData,
+    workoutHistory,
+    stats,
+    refreshWorkouts: (userId) => fetchWorkoutHistory(userId)
+  };
 
 }
 
@@ -239,7 +239,7 @@ function ProfileSkeleton() {
       <div className="animate-pulse space-y-6">
         <div className="h-8 bg-gray-800 rounded w-1/4"></div>
         <div className="h-4 bg-gray-800 rounded w-1/2"></div>
-        
+
         <div className="bg-gray-800/50 backdrop-blur-md rounded-2xl border border-cyan-500/20 p-6 space-y-6 ">
           {/* Profile Header Skeleton */}
           <div className="flex items-center space-x-4">
@@ -249,7 +249,7 @@ function ProfileSkeleton() {
               <div className="h-4 bg-gray-800 rounded w-24"></div>
             </div>
           </div>
-          
+
           {/* Form Fields Skeleton */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[...Array(8)].map((_, i) => (
@@ -291,23 +291,23 @@ function StatsCharts({ stats }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Card className="bg-gray-800/50 backdrop-blur-md border border-purple-500/30 hover:border-purple-500/50 transition-all duration-300 ">
-          <CardContent className="p-4">
+        <div className="rounded-xl shadow-md bg-gray-800/50 backdrop-blur-md border border-purple-500/30 hover:border-purple-500/50 transition-all duration-300">
+          <div className="p-4">
             <h4 className="font-semibold mb-4 text-cyan-300">CALORIES BURNED</h4>
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={workoutData}>
                 <defs>
                   <linearGradient id="caloriesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="name" stroke="#9CA3AF" />
                 <YAxis stroke="#9CA3AF" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F2937', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1F2937',
                     border: '1px solid #6D28D9',
                     borderRadius: '8px',
                     color: '#E5E7EB'
@@ -316,8 +316,8 @@ function StatsCharts({ stats }) {
                 <Area type="monotone" dataKey="calories" stroke="#8884d8" fillOpacity={1} fill="url(#caloriesGradient)" />
               </AreaChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </motion.div>
 
       <motion.div
@@ -325,36 +325,36 @@ function StatsCharts({ stats }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
       >
-        <Card className="bg-gray-800/50 backdrop-blur-md border border-cyan-500/30 hover:border-cyan-500/50 transition-all duration-300">
-          <CardContent className="p-4">
+        <div className="rounded-xl shadow-md bg-gray-800/50 backdrop-blur-md border border-cyan-500/30 hover:border-cyan-500/50 transition-all duration-300">
+          <div className="p-4">
             <h4 className="font-semibold mb-4 text-purple-300">WEIGHT PROGRESS</h4>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={weightData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="date" stroke="#9CA3AF" />
                 <YAxis stroke="#9CA3AF" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F2937', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1F2937',
                     border: '1px solid #06B6D4',
                     borderRadius: '8px',
                     color: '#E5E7EB'
                   }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="weight" 
-                  stroke="#82ca9d" 
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  stroke="#82ca9d"
                   strokeWidth={3}
                   dot={{ fill: '#82ca9d', strokeWidth: 2, r: 4 }}
                   activeDot={{ r: 6, fill: '#22C55E' }}
                 />
               </LineChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </div>
+          </div>
+        </div>
+      </motion.div >
+    </div >
   );
 }
 
@@ -362,7 +362,7 @@ function StatsCharts({ stats }) {
 function WorkoutHistory({ workouts }) {
   if (!workouts || workouts.length === 0) {
     return (
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="text-center py-8 text-gray-400"
@@ -384,8 +384,8 @@ function WorkoutHistory({ workouts }) {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.1 }}
           >
-            <Card className="bg-gray-800/30 backdrop-blur-md border border-cyan-500/10 hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20 transition-all duration-300 group">
-              <CardContent className="p-4">
+            <div className="rounded-xl shadow-md bg-gray-800/30 backdrop-blur-md border border-cyan-500/10 hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20 transition-all duration-300 group">
+              <div className="p-4">
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="font-semibold capitalize text-cyan-200 group-hover:text-cyan-100 transition-colors">
@@ -415,12 +415,12 @@ function WorkoutHistory({ workouts }) {
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </motion.div>
         ))}
       </AnimatePresence>
-    </div>
+    </div >
   );
 }
 
@@ -505,7 +505,7 @@ function ProfilePage() {
     setSaveStatus({ loading: true });
     const result = await updateUserData(editForm);
     setSaveStatus(result);
-    
+
     if (result.success) {
       setIsEditing(false);
       setTimeout(() => setSaveStatus({}), 3000);
@@ -546,27 +546,27 @@ function ProfilePage() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     if (!file.type.match('image.*')) {
       setSaveStatus({ error: "Please select an image file" });
       return;
     }
-    
+
     if (file.size > 5 * 1024 * 1024) {
       setSaveStatus({ error: "Image size must be less than 5MB" });
       return;
     }
-    
+
     setUploading(true);
-    
+
     try {
       const auth = getAuth();
       const currentUser = auth.currentUser;
-      
+
       if (!currentUser) {
         throw new Error("No user logged in");
       }
-      
+
       // Delete old photo if it exists and is from Firebase Storage
       if (user.photoURL && user.photoURL.includes('firebasestorage.googleapis.com')) {
         try {
@@ -576,12 +576,12 @@ function ProfilePage() {
           console.warn("Could not delete old photo:", error);
         }
       }
-      
+
       // Upload new photo
       const storageRef = ref(storage, `profile-photos/${currentUser.uid}/${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
-      
+
       // Update user data
       const result = await updateUserData({ photoURL: downloadURL });
       if (result.success) {
@@ -608,7 +608,7 @@ function ProfilePage() {
         const photoRef = ref(storage, user.photoURL);
         await deleteObject(photoRef);
       }
-      
+
       const result = await updateUserData({ photoURL: "" });
       if (result.success) {
         setEditForm(prev => ({ ...prev, photoURL: "" }));
@@ -632,14 +632,14 @@ function ProfilePage() {
   if (error) {
     return (
       <div className="p-6 space-y-6 bg-gray-900 min-h-screen">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           className="bg-red-900/90 border border-red-500 text-red-200 px-4 py-3 rounded-lg backdrop-blur-md"
         >
           <p>Error loading profile: {error}</p>
-          <Button 
-            onClick={() => window.location.reload()} 
+          <Button
+            onClick={() => window.location.reload()}
             className="mt-2 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 shadow-lg shadow-red-500/30"
           >
             Try Again
@@ -653,7 +653,7 @@ function ProfilePage() {
   if (!user) {
     return (
       <div className="p-6 space-y-6 bg-gray-900 min-h-screen">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-yellow-900/90 border border-yellow-500 text-yellow-200 px-4 py-3 rounded-lg backdrop-blur-md"
@@ -668,14 +668,14 @@ function ProfilePage() {
   }
 
   return (
-    <div className="p-6 pt-[90px] space-y-6 bg-gray-900 min-h-screen">
+    <div className="p-6 pt-[125px] space-y-6 bg-gray-900 min-h-screen">
       {/* Header */}
       <motion.div
-  initial={{ opacity: 0, y: 20 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ delay: 0.1 }}
->
-  <Card className="
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <div className="
       rounded-2xl 
       bg-[#0f0f0f]               /* PURE MATTE BLACK */
       border border-neutral-800   /* THIN GRAY BORDER */
@@ -683,27 +683,27 @@ function ProfilePage() {
       hover:shadow-[0_0_25px_-5px_rgba(0,0,0,0.8)]
       transition-all duration-300 
       backdrop-blur
+      p-6
     ">
-    <CardContent className="p-6">
 
-      {/* Profile Header */}
-      <div className="flex items-center space-x-4 mb-8">
-        <div className="relative">
-          {editForm.photoURL ? (
-            <motion.img
-              whileHover={{ scale: 1.03 }}
-              src={editForm.photoURL}
-              alt={editForm.name}
-              className="
+          {/* Profile Header */}
+          <div className="flex items-center space-x-4 mb-8">
+            <div className="relative">
+              {editForm.photoURL ? (
+                <motion.img
+                  whileHover={{ scale: 1.03 }}
+                  src={editForm.photoURL}
+                  alt={editForm.name}
+                  className="
                 w-20 h-20 rounded-full object-cover
                 border border-neutral-700           /* Minimal thin border */
                 shadow-[0_0_20px_rgba(0,0,0,0.6)]   /* Dark subtle shadow */
               "
-            />
-          ) : (
-            <motion.div
-              whileHover={{ scale: 1.03 }}
-              className="
+                />
+              ) : (
+                <motion.div
+                  whileHover={{ scale: 1.03 }}
+                  className="
                 w-20 h-20 rounded-full
                 bg-neutral-800                      /* Matte circle */
                 flex items-center justify-center
@@ -711,22 +711,22 @@ function ProfilePage() {
                 border border-neutral-600
                 shadow-[0_0_20px_rgba(0,0,0,0.5)]
               "
-            >
-              {editForm.name ? editForm.name.charAt(0).toUpperCase() : "U"}
-            </motion.div>
-          )}
+                >
+                  {editForm.name ? editForm.name.charAt(0).toUpperCase() : "U"}
+                </motion.div>
+              )}
 
-          {/* Upload buttons (minimal) */}
-          {isEditing && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="absolute -bottom-2 -right-2 flex space-x-2"
-            >
-              {/* Upload Button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="
+              {/* Upload buttons (minimal) */}
+              {isEditing && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="absolute -bottom-2 -right-2 flex space-x-2"
+                >
+                  {/* Upload Button */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="
                   p-2 rounded-full 
                   bg-neutral-900/80 
                   border border-neutral-700
@@ -734,20 +734,20 @@ function ProfilePage() {
                   hover:bg-neutral-800
                   transition
                 "
-                disabled={uploading}
-              >
-                {uploading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <Camera size={16} />
-                )}
-              </button>
+                    disabled={uploading}
+                  >
+                    {uploading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <Camera size={16} />
+                    )}
+                  </button>
 
-              {/* Remove Button */}
-              {editForm.photoURL && (
-                <button
-                  onClick={handleRemovePhoto}
-                  className="
+                  {/* Remove Button */}
+                  {editForm.photoURL && (
+                    <button
+                      onClick={handleRemovePhoto}
+                      className="
                     p-2 rounded-full 
                     bg-neutral-900/80 
                     border border-neutral-700
@@ -755,321 +755,324 @@ function ProfilePage() {
                     hover:bg-neutral-800
                     transition
                   "
-                  disabled={uploading}
-                >
-                  <Trash2 size={16} />
-                </button>
+                      disabled={uploading}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                </motion.div>
               )}
+            </div>
 
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleImageUpload}
-                accept="image/*"
-                className="hidden"
-              />
-            </motion.div>
-          )}
-        </div>
+            {/* Name + Level */}
+            <div className="flex-1">
+              {isEditing ? (
+                <CyberInput
+                  value={editForm.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  placeholder="Your Name"
+                  className="text-2xl font-semibold bg-neutral-900 border-neutral-700 text-neutral-200"
+                />
+              ) : (
+                <>
+                  <h2 className="text-2xl font-semibold text-neutral-200">
+                    {user.displayName || user.name}
+                  </h2>
+                  <p className="text-neutral-400 text-sm">
+                    {user.currentFitnessLevel || "Fitness Enthusiast"}
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
 
-        {/* Name + Level */}
-        <div className="flex-1">
-          {isEditing ? (
-            <CyberInput
-              value={editForm.name}
-              onChange={(e) => handleInputChange("name", e.target.value)}
-              placeholder="Your Name"
-              className="text-2xl font-semibold bg-neutral-900 border-neutral-700 text-neutral-200"
-            />
-          ) : (
-            <>
-              <h2 className="text-2xl font-semibold text-neutral-200">
-                {user.displayName || user.name}
-              </h2>
-              <p className="text-neutral-400 text-sm">
-                {user.currentFitnessLevel || "Fitness Enthusiast"}
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs section */}
-      <Tabs 
-        value={activeTab} 
-        onValueChange={setActiveTab} 
-        className="space-y-6"
-      >
-        <TabsList
-          className="
+          {/* Tabs section */}
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
+            <TabsList
+              className="
             grid grid-cols-4 
-            bg-neutral-900 
-            border border-neutral-800 
+            bg-gray-900 
+            border border-gray-800 
             rounded-lg p-1
           "
-        >
-          <TabsTrigger 
-            value="personal"
-            className="
-              text-neutral-400 
-              data-[state=active]:bg-neutral-800 
-              data-[state=active]:text-neutral-200
+            >
+              <TabsTrigger
+                value="personal"
+                className="
+              text-gray-400 
+              data-[state=active]:bg-gray-800 
+              data-[state=active]:text-cyan-400
+              hover:text-gray-200
             "
-          >
-            <User size={16} className="mr-2" /> Personal
-          </TabsTrigger>
+              >
+                <User size={16} className="mr-2" /> Personal
+              </TabsTrigger>
 
-          <TabsTrigger 
-            value="fitness"
-            className="
-              text-neutral-400 
-              data-[state=active]:bg-neutral-800 
-              data-[state=active]:text-neutral-200
+              <TabsTrigger
+                value="fitness"
+                className="
+              text-gray-400 
+              data-[state=active]:bg-gray-800 
+              data-[state=active]:text-purple-400
+              hover:text-gray-200
             "
-          >
-            <Dumbbell size={16} className="mr-2" /> Fitness
-          </TabsTrigger>
+              >
+                <Dumbbell size={16} className="mr-2" /> Fitness
+              </TabsTrigger>
 
-          <TabsTrigger 
-            value="health"
-            className="
-              text-neutral-400 
-              data-[state=active]:bg-neutral-800 
-              data-[state=active]:text-neutral-200
+              <TabsTrigger
+                value="health"
+                className="
+              text-gray-400 
+              data-[state=active]:bg-gray-800 
+              data-[state=active]:text-pink-400
+              hover:text-gray-200
             "
-          >
-            <Heart size={16} className="mr-2" /> Health
-          </TabsTrigger>
+              >
+                <Heart size={16} className="mr-2" /> Health
+              </TabsTrigger>
 
-          <TabsTrigger 
-            value="stats"
-            className="
-              text-neutral-400 
-              data-[state=active]:bg-neutral-800 
-              data-[state=active]:text-neutral-200
+              <TabsTrigger
+                value="stats"
+                className="
+              text-gray-400 
+              data-[state=active]:bg-gray-800 
+              data-[state=active]:text-green-400
+              hover:text-gray-200
             "
-          >
-            <Activity size={16} className="mr-2" /> Stats
-          </TabsTrigger>
-        </TabsList>
+              >
+                <Activity size={16} className="mr-2" /> Stats
+              </TabsTrigger>
+            </TabsList>
 
 
-              {/* Personal Information Tab */}
-              <TabsContent value="personal" className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { icon: Mail, label: "Email", field: "email", type: "email", disabled: true, color: "text-cyan-400" },
-                    { icon: Phone, label: "Phone", field: "phone", type: "tel", color: "text-purple-400" },
-                    { icon: Calendar, label: "Date of Birth", field: "dob", type: "date", color: "text-pink-400" },
-                    { icon: MapPin, label: "Location", field: "location", type: "text", color: "text-green-400" },
-                    { icon: User, label: "Gender", field: "gender", type: "select", color: "text-cyan-400" },
-                    { icon: Ruler, label: "Height", field: "height", type: "text", color: "text-purple-400" },
-                    { icon: Scale, label: "Weight", field: "weight", type: "text", color: "text-pink-400" },
-                    { icon: Target, label: "Target Weight", field: "targetWeight", type: "text", color: "text-green-400" },
-                  ].map(({ icon: Icon, label, field, type, disabled = false, color }) => (
-                    <motion.div 
-                      key={field}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex items-center space-x-3 p-3 rounded-lg bg-gray-800/30 border border-cyan-500/10 hover:border-cyan-500/30 transition-all duration-300"
-                    >
-                      <Icon className={`${color} flex-shrink-0`} />
-                      <span className="text-gray-400 min-w-20">{label}:</span>
-                      {isEditing ? (
-                        type === "select" ? (
-                          <CyberSelect
-                            value={editForm[field]}
-                            onChange={(e) => handleInputChange(field, e.target.value)}
-                            className="flex-1"
-                          >
-                            <option value="">Select Gender</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                            <option value="other">Other</option>
-                            <option value="prefer-not-to-say">Prefer not to say</option>
-                          </CyberSelect>
-                        ) : (
-                          <CyberInput
-                            type={type}
-                            value={editForm[field]}
-                            onChange={(e) => handleInputChange(field, e.target.value)}
-                            placeholder={label}
-                            disabled={disabled}
-                            className="flex-1"
-                          />
-                        )
-                      ) : (
-                        <span className="flex-1 text-cyan-100">{user[field] || "Not provided"}</span>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              </TabsContent>
-
-              {/* Fitness Information Tab */}
-              <TabsContent value="fitness" className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: "Primary Fitness Goal", field: "fitnessGoal", options: ["weight-loss", "muscle-gain", "endurance", "maintenance", "rehabilitation"] },
-                    { label: "Activity Level", field: "activityLevel", options: ["sedentary", "light", "moderate", "very", "extreme"] },
-                    { label: "Workout Frequency", field: "workoutFrequency", options: ["1-2", "3-4", "5-6", "daily"] },
-                    { label: "Preferred Workout Time", field: "workoutTimePreference", options: ["morning", "afternoon", "evening", "flexible"] },
-                  ].map(({ label, field, options }) => (
-                    <motion.div 
-                      key={field}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-3 rounded-lg bg-gray-800/30 border border-purple-500/10 hover:border-purple-500/30 transition-all duration-300"
-                    >
-                      <label className="block text-sm font-medium text-purple-300 mb-2">{label}</label>
-                      {isEditing ? (
+            {/* Personal Information Tab */}
+            <TabsContent value="personal" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { icon: Mail, label: "Email", field: "email", type: "email", disabled: true, color: "text-cyan-400" },
+                  { icon: Phone, label: "Phone", field: "phone", type: "tel", color: "text-purple-400" },
+                  { icon: Calendar, label: "Date of Birth", field: "dob", type: "date", color: "text-pink-400" },
+                  { icon: MapPin, label: "Location", field: "location", type: "text", color: "text-green-400" },
+                  { icon: User, label: "Gender", field: "gender", type: "select", color: "text-cyan-400" },
+                  { icon: Ruler, label: "Height", field: "height", type: "text", color: "text-purple-400" },
+                  { icon: Scale, label: "Weight", field: "weight", type: "text", color: "text-pink-400" },
+                  { icon: Target, label: "Target Weight", field: "targetWeight", type: "text", color: "text-green-400" },
+                ].map(({ icon: Icon, label, field, type, disabled = false, color }) => (
+                  <motion.div
+                    key={field}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center space-x-3 p-3 rounded-lg bg-black/40 border border-gray-800 hover:border-cyan-500/50 transition-all duration-300 shadow-sm"
+                  >
+                    <Icon className={`${color} flex-shrink-0`} />
+                    <span className="text-gray-400 min-w-20">{label}:</span>
+                    {isEditing ? (
+                      type === "select" ? (
                         <CyberSelect
                           value={editForm[field]}
                           onChange={(e) => handleInputChange(field, e.target.value)}
-                          className="w-full"
+                          className="flex-1"
                         >
-                          <option value="">Select {label}</option>
-                          {options.map(option => (
-                            <option key={option} value={option}>
-                              {option.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                            </option>
-                          ))}
+                          <option value="">Select Gender</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
+                          <option value="prefer-not-to-say">Prefer not to say</option>
                         </CyberSelect>
                       ) : (
-                        <p className="text-cyan-100 capitalize">
-                          {user[field]?.replace('-', ' ') || "Not set"}
-                        </p>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
+                        <CyberInput
+                          type={type}
+                          value={editForm[field]}
+                          onChange={(e) => handleInputChange(field, e.target.value)}
+                          placeholder={label}
+                          disabled={disabled}
+                          className="flex-1"
+                        />
+                      )
+                    ) : (
+                      <span className="flex-1 text-cyan-100">{user[field] || "Not provided"}</span>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </TabsContent>
 
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-3 rounded-lg bg-gray-800/30 border border-cyan-500/10 hover:border-cyan-500/30 transition-all duration-300"
-                >
-                  <label className="block text-sm font-medium text-cyan-300 mb-2">Fitness Motivation</label>
-                  {isEditing ? (
-                    <CyberTextArea
-                      value={editForm.fitnessMotivation}
-                      onChange={(e) => handleInputChange("fitnessMotivation", e.target.value)}
-                      placeholder="What motivates you to stay fit?"
-                      rows="3"
-                    />
-                  ) : (
-                    <p className="text-cyan-100">{user.fitnessMotivation || "Not provided"}</p>
-                  )}
-                </motion.div>
+            {/* Fitness Information Tab */}
+            <TabsContent value="fitness" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { label: "Primary Fitness Goal", field: "fitnessGoal", options: ["weight-loss", "muscle-gain", "endurance", "maintenance", "rehabilitation"] },
+                  { label: "Activity Level", field: "activityLevel", options: ["sedentary", "light", "moderate", "very", "extreme"] },
+                  { label: "Workout Frequency", field: "workoutFrequency", options: ["1-2", "3-4", "5-6", "daily"] },
+                  { label: "Preferred Workout Time", field: "workoutTimePreference", options: ["morning", "afternoon", "evening", "flexible"] },
+                ].map(({ label, field, options }) => (
+                  <motion.div
+                    key={field}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-3 rounded-lg bg-black/40 border border-gray-800 hover:border-purple-500/50 transition-all duration-300 shadow-sm"
+                  >
+                    <label className="block text-sm font-medium text-purple-300 mb-2">{label}</label>
+                    {isEditing ? (
+                      <CyberSelect
+                        value={editForm[field]}
+                        onChange={(e) => handleInputChange(field, e.target.value)}
+                        className="w-full"
+                      >
+                        <option value="">Select {label}</option>
+                        {options.map(option => (
+                          <option key={option} value={option}>
+                            {option.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                          </option>
+                        ))}
+                      </CyberSelect>
+                    ) : (
+                      <p className="text-cyan-100 capitalize">
+                        {user[field]?.replace('-', ' ') || "Not set"}
+                      </p>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
 
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-3 rounded-lg bg-gray-800/30 border border-purple-500/10 hover:border-purple-500/30 transition-all duration-300"
-                >
-                  <label className="block text-sm font-medium text-purple-300 mb-2">Dietary Preferences</label>
-                  {isEditing ? (
-                    <CyberTextArea
-                      value={editForm.dietaryPreferences}
-                      onChange={(e) => handleInputChange("dietaryPreferences", e.target.value)}
-                      placeholder="Any dietary preferences or restrictions?"
-                      rows="2"
-                    />
-                  ) : (
-                    <p className="text-cyan-100">{user.dietaryPreferences || "Not provided"}</p>
-                  )}
-                </motion.div>
-              </TabsContent>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="p-3 rounded-lg bg-gray-800/30 border border-cyan-500/10 hover:border-cyan-500/30 transition-all duration-300"
+              >
+                <label className="block text-sm font-medium text-cyan-300 mb-2">Fitness Motivation</label>
+                {isEditing ? (
+                  <CyberTextArea
+                    value={editForm.fitnessMotivation}
+                    onChange={(e) => handleInputChange("fitnessMotivation", e.target.value)}
+                    placeholder="What motivates you to stay fit?"
+                    rows="3"
+                  />
+                ) : (
+                  <p className="text-cyan-100">{user.fitnessMotivation || "Not provided"}</p>
+                )}
+              </motion.div>
 
-              {/* Health Information Tab */}
-              <TabsContent value="health" className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: "Medical Conditions", field: "medicalConditions", rows: 3 },
-                    { label: "Injuries", field: "injuries", rows: 3 },
-                    { label: "Allergies", field: "allergies", rows: 3 },
-                    { label: "Emergency Contact", field: "emergencyContact", rows: 1 },
-                  ].map(({ label, field, rows }) => (
-                    <motion.div 
-                      key={field}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-3 rounded-lg bg-gray-800/30 border border-pink-500/10 hover:border-pink-500/30 transition-all duration-300"
-                    >
-                      <label className="block text-sm font-medium text-pink-300 mb-2">{label}</label>
-                      {isEditing ? (
-                        rows > 1 ? (
-                          <CyberTextArea
-                            value={editForm[field]}
-                            onChange={(e) => handleInputChange(field, e.target.value)}
-                            placeholder={label}
-                            rows={rows}
-                          />
-                        ) : (
-                          <CyberInput
-                            value={editForm[field]}
-                            onChange={(e) => handleInputChange(field, e.target.value)}
-                            placeholder={label}
-                          />
-                        )
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="p-3 rounded-lg bg-gray-800/30 border border-purple-500/10 hover:border-purple-500/30 transition-all duration-300"
+              >
+                <label className="block text-sm font-medium text-purple-300 mb-2">Dietary Preferences</label>
+                {isEditing ? (
+                  <CyberTextArea
+                    value={editForm.dietaryPreferences}
+                    onChange={(e) => handleInputChange("dietaryPreferences", e.target.value)}
+                    placeholder="Any dietary preferences or restrictions?"
+                    rows="2"
+                  />
+                ) : (
+                  <p className="text-cyan-100">{user.dietaryPreferences || "Not provided"}</p>
+                )}
+              </motion.div>
+            </TabsContent>
+
+            {/* Health Information Tab */}
+            <TabsContent value="health" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { label: "Medical Conditions", field: "medicalConditions", rows: 3 },
+                  { label: "Injuries", field: "injuries", rows: 3 },
+                  { label: "Allergies", field: "allergies", rows: 3 },
+                  { label: "Emergency Contact", field: "emergencyContact", rows: 1 },
+                ].map(({ label, field, rows }) => (
+                  <motion.div
+                    key={field}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-3 rounded-lg bg-gray-800/30 border border-pink-500/10 hover:border-pink-500/30 transition-all duration-300"
+                  >
+                    <label className="block text-sm font-medium text-pink-300 mb-2">{label}</label>
+                    {isEditing ? (
+                      rows > 1 ? (
+                        <CyberTextArea
+                          value={editForm[field]}
+                          onChange={(e) => handleInputChange(field, e.target.value)}
+                          placeholder={label}
+                          rows={rows}
+                        />
                       ) : (
-                        <p className="text-cyan-100">{user[field] || "None reported"}</p>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-              </TabsContent>
+                        <CyberInput
+                          value={editForm[field]}
+                          onChange={(e) => handleInputChange(field, e.target.value)}
+                          placeholder={label}
+                        />
+                      )
+                    ) : (
+                      <p className="text-cyan-100">{user[field] || "None reported"}</p>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </TabsContent>
 
-              {/* Stats & Progress Tab */}
-              <TabsContent value="stats" className="space-y-6">
-                {/* Stats Overview */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { value: stats?.totalWorkouts || 0, label: "Total Workouts", color: "from-cyan-600 to-blue-600", icon: Zap },
-                    { value: `${stats?.activeDays || 0}/7`, label: "Active Days", color: "from-purple-600 to-pink-600", icon: Activity },
-                    { value: stats?.totalCalories ? Math.round(stats.totalCalories).toLocaleString() : 0, label: "Calories Burned", color: "from-pink-600 to-red-600", icon: Flame },
-                    { value: `${stats?.progressPercentage || 0}%`, label: "Progress", color: "from-green-600 to-cyan-600", icon: TrendingUp },
-                  ].map((stat, index) => (
-                    <motion.div
-                      key={stat.label}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ scale: 1.05 }}
-                      className={`bg-gradient-to-br ${stat.color} rounded-xl p-4 text-center shadow-lg backdrop-blur-md border border-white/10`}
-                    >
-                      <stat.icon className="w-8 h-8 text-white mx-auto mb-2" />
-                      <div className="text-2xl font-bold text-white">{stat.value}</div>
-                      <div className="text-sm text-white/80">{stat.label}</div>
-                    </motion.div>
-                  ))}
-                </div>
+            {/* Stats & Progress Tab */}
+            <TabsContent value="stats" className="space-y-6">
+              {/* Stats Overview */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { value: stats?.totalWorkouts || 0, label: "Total Workouts", color: "from-cyan-600 to-blue-600", icon: Zap },
+                  { value: `${stats?.activeDays || 0}/7`, label: "Active Days", color: "from-purple-600 to-pink-600", icon: Activity },
+                  { value: stats?.totalCalories ? Math.round(stats.totalCalories).toLocaleString() : 0, label: "Calories Burned", color: "from-pink-600 to-red-600", icon: Flame },
+                  { value: `${stats?.progressPercentage || 0}%`, label: "Progress", color: "from-green-600 to-cyan-600", icon: TrendingUp },
+                ].map((stat, index) => (
+                  <motion.div
+                    key={stat.label}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                    whileHover={{ scale: 1.05 }}
+                    className={`bg-gradient-to-br ${stat.color} rounded-xl p-4 text-center shadow-lg backdrop-blur-md border border-white/10`}
+                  >
+                    <stat.icon className="w-8 h-8 text-white mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-white">{stat.value}</div>
+                    <div className="text-sm text-white/80">{stat.label}</div>
+                  </motion.div>
+                ))}
+              </div>
 
-                {/* Charts */}
-                <StatsCharts stats={stats} />
+              {/* Charts */}
+              <StatsCharts stats={stats} />
 
-                {/* Workout History */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4 flex items-center text-cyan-300">
-                    <Rocket className="mr-2 text-cyan-400" />
-                    RECENT WORKOUTS
-                  </h3>
-                  <WorkoutHistory workouts={workoutHistory} />
-                </div>
-              </TabsContent>
-            </Tabs>
+              {/* Workout History */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4 flex items-center text-cyan-300">
+                  <Rocket className="mr-2 text-cyan-400" />
+                  RECENT WORKOUTS
+                </h3>
+                <WorkoutHistory workouts={workoutHistory} />
+              </div>
+            </TabsContent>
+          </Tabs>
 
-            {/* System Information */}
-            <div className="flex justify-between items-center text-sm text-gray-400 mt-6 pt-4 border-t border-cyan-500/20">
-              <p>Member since {user.joined ? new Date(user.joined).toLocaleDateString() : "January 2025"}</p>
-              {user.lastUpdated && (
-                <p>Last updated: {new Date(user.lastUpdated).toLocaleDateString()}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+          {/* System Information */}
+          <div className="flex justify-between items-center text-sm text-gray-400 mt-6 pt-4 border-t border-cyan-500/20">
+            <p>Member since {user.joined ? new Date(user.joined).toLocaleDateString() : "January 2025"}</p>
+            {user.lastUpdated && (
+              <p>Last updated: {new Date(user.lastUpdated).toLocaleDateString()}</p>
+            )}
+          </div>
+        </div>
       </motion.div>
-    </div>
+    </div >
   );
 }
 

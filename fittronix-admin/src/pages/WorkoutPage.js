@@ -1,6 +1,7 @@
 // src/pages/WorkoutPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useSearchParams } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "../firebase";
 
@@ -20,7 +21,7 @@ const ALL_WORKOUTS = [
     id: "pushup",
     name: "Push-Ups",
     image: "/workouts/pushup.jpg",
-    video: "https://www.youtube.com/embed/_l3ySVKYVJ8",
+    video: "https://www.youtube.com/embed/IODxDxX7oi4",
     benefits: [
       "Builds chest, shoulders & triceps",
       "Improves upper-body strength",
@@ -35,7 +36,7 @@ const ALL_WORKOUTS = [
     id: "squat",
     name: "Squats",
     image: "/workouts/squat.jpg",
-    video: "https://www.youtube.com/embed/aclHkVaku9U",
+    video: "https://www.youtube.com/embed/gcNh17Ckjgg",
     benefits: [
       "Strengthens legs & glutes",
       "Improves mobility",
@@ -50,7 +51,7 @@ const ALL_WORKOUTS = [
     id: "plank",
     name: "Plank",
     image: "/workouts/plank.jpg",
-    video: "https://www.youtube.com/embed/pSHjTRCQxIw",
+    video: "https://www.youtube.com/embed/ASdvN_XEl_c",
     benefits: [
       "Strengthens core muscles",
       "Improves posture",
@@ -65,7 +66,7 @@ const ALL_WORKOUTS = [
     id: "lunge",
     name: "Lunges",
     image: "/workouts/lunge.jpg",
-    video: "https://www.youtube.com/embed/QOVaHwm-Q6U",
+    video: "https://www.youtube.com/embed/WrznHHCMIF8",
     benefits: [
       "Targets quads & glutes",
       "Improves balance",
@@ -80,7 +81,7 @@ const ALL_WORKOUTS = [
     id: "burpee",
     name: "Burpees",
     image: "/workouts/burpee.jpg",
-    video: "https://www.youtube.com/embed/1N9w7cK4YHg",
+    video: "https://www.youtube.com/embed/auBLPXO8Fww",
     benefits: [
       "Full-body conditioning",
       "High calorie burn",
@@ -90,6 +91,81 @@ const ALL_WORKOUTS = [
     level: "Advanced",
     description:
       "Burpees are an intense full-body exercise combining a squat, plank and jump. Focus on form and pace yourself — they are taxing but effective."
+  },
+  {
+    id: "mountain_climbers",
+    name: "Mountain Climbers",
+    image: "/workouts/mountain_climbers.png",
+    video: "https://www.youtube.com/embed/cnyTQDSE884",
+    benefits: [
+      "Full body workout",
+      "Increases heart rate",
+      "Strengthens core",
+      "Improves agility"
+    ],
+    level: "Intermediate",
+    description:
+      "Mountain climbers are a dynamic exercise that combines a plank with knee drives. Keep your core tight and move your legs quickly."
+  },
+  {
+    id: "jumping_jacks",
+    name: "Jumping Jacks",
+    image: "/workouts/jumping_jacks.png",
+    video: "https://www.youtube.com/embed/UpH7rm0cYbM",
+    benefits: [
+      "Cardiovascular health",
+      "Warm-up essential",
+      "Full body movement",
+      "Improves coordination"
+    ],
+    level: "Beginner",
+    description:
+      "Jumping jacks are a classic cardio exercise. Jump your feet out wide while raising your arms, then return to the starting position."
+  },
+  {
+    id: "high_knees",
+    name: "High Knees",
+    image: "/workouts/high_knees.png",
+    video: "https://www.youtube.com/embed/ZZzL2o085aQ",
+    benefits: [
+      "High intensity cardio",
+      "Strengthens legs",
+      "Engages core",
+      "Improves running form"
+    ],
+    level: "Beginner",
+    description:
+      "High knees involve running in place while lifting your knees as high as possible. Pump your arms to keep the intensity up."
+  },
+  {
+    id: "side_plank",
+    name: "Side Plank",
+    image: "/workouts/side_plank.png",
+    video: "https://www.youtube.com/embed/NXr4Fw8q60o",
+    benefits: [
+      "Oblique strength",
+      "Core stability",
+      "Improves balance",
+      "Reduces back pain"
+    ],
+    level: "Intermediate",
+    description:
+      "The side plank targets your obliques. Prop yourself up on one forearm and the side of your foot, keeping your body in a straight line."
+  },
+  {
+    id: "bicycle_crunches",
+    name: "Bicycle Crunches",
+    image: "/workouts/bicycle_crunches.png",
+    video: "https://www.youtube.com/embed/Im5wJLgR8fs",
+    benefits: [
+      "Targets abs & obliques",
+      "No equipment needed",
+      "Improves coordination",
+      "Builds core strength"
+    ],
+    level: "Intermediate",
+    description:
+      "Bicycle crunches are great for the rectus abdominis and obliques. Lie on your back and alternate bringing your elbow to the opposite knee."
   }
 ];
 
@@ -110,7 +186,8 @@ export default function WorkoutPage() {
   }, []);
 
   // local UI state
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") || "");
   const [levelFilter, setLevelFilter] = useState("All"); // All / Beginner / Intermediate / Advanced
   const [activeWorkout, setActiveWorkout] = useState(null); // workout object for modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -143,7 +220,7 @@ export default function WorkoutPage() {
     setTimeout(() => setActiveWorkout(null), 300);
   };
 
-  
+
 
   return (
     <div className="min-h-screen bg-gray-900 text-white pt-40 pb-16 ">
@@ -183,7 +260,7 @@ export default function WorkoutPage() {
               <option value="Advanced">Advanced</option>
             </select>
 
-            
+
           </div>
         </div>
       </div>

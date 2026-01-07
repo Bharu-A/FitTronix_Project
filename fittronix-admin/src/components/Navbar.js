@@ -68,7 +68,7 @@ const useAuth = () => {
           });
         } else {
           // Update lastLogin non-blocking
-          updateDoc(userRef, { lastLogin: new Date() }).catch(() => {});
+          updateDoc(userRef, { lastLogin: new Date() }).catch(() => { });
         }
 
         if (tokenResult?.claims?.admin) {
@@ -316,7 +316,7 @@ const AuthModal = ({ showModal, setShowModal, isLogin, setIsLogin, showForgotPas
       try {
         const userCred = await signInWithEmailAndPassword(auth, formData.email, formData.password);
         // Update lastLogin
-        updateDoc(doc(db, "users", userCred.user.uid), { lastLogin: new Date() }).catch(() => {});
+        updateDoc(doc(db, "users", userCred.user.uid), { lastLogin: new Date() }).catch(() => { });
         setShowModal(false);
       } catch (err) {
         setError(getAuthErrorMessage(err.code));
@@ -493,6 +493,25 @@ export default function Navbar({ toggleSidebar }) {
 
   const lastScrollY = useRef(0);
 
+  // Click-outside refs
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setShowProfileMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   // initialize theme only once
   useEffect(() => {
     const saved = localStorage.getItem("theme");
@@ -535,7 +554,7 @@ export default function Navbar({ toggleSidebar }) {
       localStorage.setItem("theme", "light");
     }
     if (user?.uid) {
-      updateDoc(doc(db, "users", user.uid), { "preferences.theme": newDark ? "dark" : "light" }).catch(() => {});
+      updateDoc(doc(db, "users", user.uid), { "preferences.theme": newDark ? "dark" : "light" }).catch(() => { });
     }
   }, [darkMode, user?.uid]);
 
@@ -557,13 +576,13 @@ export default function Navbar({ toggleSidebar }) {
 
   // nav links click helper (keeps previous behavior)
   const handleNavigation = (path, hash) => {
-  if (location.pathname === path) {
-    scrollToHash(hash);
-    return;
-  }
+    if (location.pathname === path) {
+      scrollToHash(hash);
+      return;
+    }
 
-  navigate(path, { state: { scrollTo: hash } });
-};
+    navigate(path, { state: { scrollTo: hash } });
+  };
 
 
   // small skeleton while auth initialises
@@ -582,11 +601,10 @@ export default function Navbar({ toggleSidebar }) {
   return (
     <>
       <nav
-  className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-6 py-3 
-    bg-[#0A0F1F] shadow-lg border-b border-cyan-500/20 z-50 transition-all duration-500 ${
-      isVisible ? "translate-y-0" : "-translate-y-full"
-    }`}
->
+        className={`fixed top-0 left-0 w-full flex items-center justify-between px-4 md:px-6 py-3 
+    bg-[#0A0F1F] shadow-lg border-b border-cyan-500/20 z-50 transition-all duration-500 ${isVisible ? "translate-y-0" : "-translate-y-full"
+          }`}
+      >
 
         {/* Left: sidebar toggle + logo */}
         <div className="flex items-center space-x-4">
@@ -598,7 +616,10 @@ export default function Navbar({ toggleSidebar }) {
             ☰
           </button>
 
-          <div className="flex items-center space-x-2 md:space-x-3 px-4 h-12 md:h-16">
+          <div
+            className="flex items-center space-x-2 md:space-x-3 px-4 h-12 md:h-16 cursor-pointer"
+            onClick={() => handleNavigation("/", "#home")}
+          >
             <img src="/assests/logo.png" alt="FitTronix Logo" className="h-8 w-8 md:h-10 md:w-10 drop-shadow-[0_0_6px_cyan]" />
             <h1 className="text-lg md:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-pink-500 whitespace-nowrap">
               FitTronix
@@ -615,6 +636,12 @@ export default function Navbar({ toggleSidebar }) {
               className="w-full px-4 py-2 pl-10 bg-gray-100 dark:bg-gray-800 rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-400"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchQuery.trim()) {
+                  navigate(`/workoutPage?q=${encodeURIComponent(searchQuery.trim())}`);
+                  setShowSearch(false); // close mobile search if open
+                }
+              }}
             />
             <svg className="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -635,6 +662,7 @@ export default function Navbar({ toggleSidebar }) {
                 About
               </button>
             </li>
+
             <li>
               <button className="text-gray-700 dark:text-gray-300 hover:text-cyan-500 transition" onClick={() => handleNavigation("/", "#features")}>
                 Features
@@ -654,18 +682,7 @@ export default function Navbar({ toggleSidebar }) {
             </svg>
           </button>
 
-          {/* Theme toggle */}
-          <button className="p-2 text-gray-700 dark:text-gray-300 hover:text-cyan-500" onClick={toggleDarkMode} aria-label="Toggle dark mode">
-            {darkMode ? (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
-            )}
-          </button>
+
 
           {/* Notifications */}
           {isAuthenticated && (
@@ -682,38 +699,36 @@ export default function Navbar({ toggleSidebar }) {
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 backdrop-blur-xl border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl z-50">
-                  <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                    <h3 className="font-bold text-gray-800 dark:text-white">Notifications</h3>
+                <div
+                  ref={notifRef}
+                  className="absolute right-0 mt-2 w-80 bg-[#0f0f0f] border border-gray-800 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.8)] z-50 overflow-hidden"
+                >
+                  <div className="p-4 border-b border-gray-800 flex justify-between items-center">
+                    <h3 className="font-semibold text-gray-200">Notifications</h3>
                     {notifications.length > 0 && (
-                      <button className="text-sm text-cyan-500 hover:text-cyan-600" onClick={() => markAllAsRead()}>
+                      <button className="text-xs text-cyan-500 hover:text-cyan-400" onClick={() => markAllAsRead()}>
                         Mark all read
                       </button>
                     )}
                   </div>
-                  <div className="max-h-96 overflow-y-auto">
-                    {notifications.length === 0 ? (
-                      <p className="p-4 text-gray-500 text-center">No notifications</p>
-                    ) : (
-                      notifications.map((notification) => (
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                    {notifications.length > 0 ? (
+                      notifications.map((notif) => (
                         <div
-                          key={notification.id}
-                          className={`p-4 border-b border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 ${
-                            notification.read ? "bg-gray-50 dark:bg-gray-750" : "bg-blue-50 dark:bg-blue-900/20"
-                          }`}
-                          onClick={() => handleNotificationClick(notification)}
+                          key={notif.id}
+                          className={`p-3 border-b border-gray-800 cursor-pointer hover:bg-gray-800/50 transition-colors ${notif.read ? '' : 'bg-gray-900'}`}
+                          onClick={() => handleNotificationClick(notif)}
                         >
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <p className="font-medium text-gray-800 dark:text-white">{notification.title}</p>
-                              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{notification.message}</p>
-                            </div>
-                            <span className="text-xs text-gray-500">
-                              {notification.createdAt?.toDate ? new Date(notification.createdAt.toDate()).toLocaleDateString() : ""}
-                            </span>
-                          </div>
+                          <p className="text-sm text-gray-300">{notif.message}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {notif.createdAt?.toDate ? new Date(notif.createdAt.toDate()).toLocaleDateString() : ""}
+                          </p>
                         </div>
                       ))
+                    ) : (
+                      <div className="p-6 text-center text-gray-500">
+                        <p>No notifications</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -729,27 +744,30 @@ export default function Navbar({ toggleSidebar }) {
           ) : (
             <div className="relative">
               <button
-                className="flex items-center space-x-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+                className="flex items-center space-x-2 px-3 py-2 bg-gray-800 rounded-lg hover:bg-gray-700 transition border border-gray-700"
                 onClick={() => setShowProfileMenu((s) => !s)}
                 aria-label="Profile menu"
               >
                 <img src={user?.photoURL || "/profile.png"} alt="Profile" className="h-8 w-8 rounded-full border-2 border-cyan-400" />
-                <span className="hidden md:inline text-gray-700 dark:text-gray-300">{user?.name || (user?.role === "admin" ? "Admin" : "User")}</span>
-                <svg className="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span className="hidden md:inline text-gray-200">{user?.name || (user?.role === "admin" ? "Admin" : "User")}</span>
+                <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
               {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50">
-                  <div className="px-4 py-3">
-                    <p className="text-sm font-medium text-gray-800 dark:text-white">{user?.name || "User"}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                <div
+                  ref={profileRef}
+                  className="absolute right-0 mt-2 w-48 bg-[#0f0f0f] border border-gray-800 rounded-xl shadow-[0_0_15px_rgba(0,0,0,0.8)] z-50"
+                >
+                  <div className="px-4 py-3 border-b border-gray-800">
+                    <p className="text-sm font-medium text-cyan-400">{user?.name || "User"}</p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                   </div>
-                  <div className="border-t border-gray-200 dark:border-gray-700">
-                    <button onClick={() => { setShowProfileMenu(false); navigate(user?.role === "admin" ? "/admin/dashboard" : "/dashboard"); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Dashboard</button>
-                    <button onClick={() => { setShowProfileMenu(false); navigate("/profile"); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">My Profile</button>
-                    <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</button>
+                  <div className="py-1">
+                    <button onClick={() => { setShowProfileMenu(false); navigate(user?.role === "admin" ? "/admin/dashboard" : "/dashboard"); }} className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-cyan-400 transition-colors">Dashboard</button>
+                    <button onClick={() => { setShowProfileMenu(false); navigate("/profile"); }} className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 hover:text-cyan-400 transition-colors">My Profile</button>
+                    <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-800 hover:text-red-400 transition-colors">Logout</button>
                   </div>
                 </div>
               )}

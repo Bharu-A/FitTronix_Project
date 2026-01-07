@@ -20,7 +20,7 @@ export default function FAQContact({ faqs = [], loading = true, onContactSubmit,
 
   return (
     <>
-      <section className="py-40 bg-[#0F1115]">
+      <section id="contact" className="py-40 bg-[#0F1115]">
         <div className="max-w-7xl mx-auto px-6 md:px-8 grid grid-cols-1 md:grid-cols-2 gap-10">
           <div>
             <h3 className="text-3xl font-semibold text-[#E4E6EB]">Frequently asked</h3>

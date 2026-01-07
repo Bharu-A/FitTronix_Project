@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
+
 import { motion, AnimatePresence } from "framer-motion";
 // Recharts for charts
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts";
@@ -43,11 +44,52 @@ const safeJSONParse = (str, fallback) => {
   try { return JSON.parse(str); } catch (e) { return fallback; }
 };
 
+const PREDEFINED_FOODS = [
+  { name: "Egg (Large)", calories: 72, protein: 6, carbs: 0.4, fats: 5, mealType: "breakfast" },
+  { name: "Oatmeal (1 cup cooked)", calories: 158, protein: 6, carbs: 27, fats: 3, mealType: "breakfast" },
+  { name: "Chicken Breast (100g)", calories: 165, protein: 31, carbs: 0, fats: 3.6, mealType: "lunch" },
+  { name: "Salmon (100g)", calories: 206, protein: 22, carbs: 0, fats: 13, mealType: "dinner" },
+  { name: "Rice (White, 1 cup cooked)", calories: 205, protein: 4, carbs: 45, fats: 0.4, mealType: "lunch" },
+  { name: "Broccoli (1 cup)", calories: 55, protein: 3.7, carbs: 11, fats: 0.6, mealType: "lunch" },
+  { name: "Banana (Medium)", calories: 105, protein: 1.3, carbs: 27, fats: 0.3, mealType: "snack" },
+  { name: "Almonds (1 oz)", calories: 164, protein: 6, carbs: 6, fats: 14, mealType: "snack" },
+  { name: "Greek Yogurt (1 cup)", calories: 100, protein: 17, carbs: 6, fats: 0.7, mealType: "breakfast" },
+  { name: "Apple (Medium)", calories: 95, protein: 0.5, carbs: 25, fats: 0.3, mealType: "snack" },
+];
+
+// OpenFoodFacts API Search
+const searchOpenFoodFacts = async (query) => {
+  if (!query || query.length < 3) return [];
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=5`);
+    const data = await res.json();
+    if (!data.products) return [];
+
+    return data.products.map(p => ({
+      name: p.product_name,
+      calories: Math.round(p.nutriments?.['energy-kcal_100g'] || 0),
+      protein: Math.round(p.nutriments?.proteins_100g || 0),
+      carbs: Math.round(p.nutriments?.carbohydrates_100g || 0),
+      fats: Math.round(p.nutriments?.fat_100g || 0),
+      source: 'OpenFoodFacts'
+    })).filter(p => p.calories > 0 || p.protein > 0);
+  } catch (err) {
+    console.error("OpenFoodFacts search error", err);
+    return [];
+  }
+};
+
 const HealthTracker = () => {
   const [activeTab, setActiveTab] = useState("calculator");
   const [userData, setUserData] = useState(() => {
     const saved = typeof window !== 'undefined' && localStorage.getItem(storageKeys.user);
     return saved ? safeJSONParse(saved, DEFAULT_USER) : DEFAULT_USER;
+  });
+
+  const [isEditing, setIsEditing] = useState(() => {
+    // Default to editing if no critical data (e.g. weight/age)
+    if (userData && (!userData.age || !userData.weight)) return true;
+    return false;
   });
 
   const [bmiResult, setBmiResult] = useState(null);
@@ -286,52 +328,198 @@ const HealthTracker = () => {
   const generateReport = useCallback((type = 'daily') => {
     try {
       const doc = new jsPDF();
-      let y = 18;
+      const pageWidth = doc.internal.pageSize.width;
+      const pageHeight = doc.internal.pageSize.height;
+      const margin = 14;
+      let y = 20;
+
+      // --- Watermark ---
+      const addWatermark = (pdfDoc) => {
+        const totalPages = pdfDoc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+          pdfDoc.setPage(i);
+          // Check if saveGraphicsState exists (recent jsPDF versions)
+          if (pdfDoc.saveGraphicsState) pdfDoc.saveGraphicsState();
+
+          pdfDoc.setFontSize(60);
+          pdfDoc.setTextColor(240, 240, 240); // Very light gray
+          pdfDoc.setFont('helvetica', 'bold');
+          // Center watermark
+          pdfDoc.text('FitTronix AI', pageWidth / 2, pageHeight / 2, { align: 'center', angle: 45 });
+
+          if (pdfDoc.restoreGraphicsState) pdfDoc.restoreGraphicsState();
+        }
+      };
+
+      // --- Header ---
+      doc.setFontSize(22);
+      doc.setTextColor(0, 150, 255); // Brand Cyan/Blue
+      doc.setFont('helvetica', 'bold');
+      doc.text('FitTronix AI Trainer', margin, y);
+
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.setFont('helvetica', 'normal');
+      const dateStr = new Date().toLocaleString();
+      // Right align date
+      const dateWidth = doc.getTextWidth(`Generated on: ${dateStr}`);
+      doc.text(`Generated on: ${dateStr}`, pageWidth - margin - dateWidth, y);
+
+      y += 10;
+      doc.setDrawColor(0, 150, 255);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 10;
+
+      // --- Title ---
       doc.setFontSize(16);
-      doc.text(type === 'weekly' ? 'WEEKLY HEALTH REPORT' : 'DAILY HEALTH REPORT', 14, y);
-      y += 8;
+      doc.setTextColor(40, 40, 40); // Dark gray
+      doc.setFont('helvetica', 'bold');
+      const title = type === 'daily' ? 'DAILY HEALTH REPORT' : 'WEEKLY HEALTH REPORT';
+      doc.text(title, margin, y);
+      y += 10;
 
-      // Personal info
-      doc.setFontSize(11);
-      const personal = [
-        ['Gender', userData.gender], ['Age', userData.age], ['Height', `${userData.height} cm`], ['Weight', `${userData.weight} kg`], ['Activity', userData.activityLevel], ['Goal', userData.goal]
+      // --- User Profile Section ---
+      doc.setFontSize(12);
+      doc.setTextColor(0, 150, 255);
+      doc.text('User Profile', margin, y);
+      y += 6;
+
+      const userRows = [
+        ['Gender', userData.gender || '-'],
+        ['Age', userData.age ? `${userData.age} years` : '-'],
+        ['Height', userData.height ? `${userData.height} cm` : '-'],
+        ['Weight', userData.weight ? `${userData.weight} kg` : '-'],
+        ['Goal', userData.goal ? userData.goal.toUpperCase() : '-'],
+        ['Activity', userData.activityLevel ? userData.activityLevel.toUpperCase() : '-']
       ];
-      // use autoTable if exists
+
       if (doc.autoTable) {
-        doc.autoTable({ startY: y, head: [['Field','Value']], body: personal, theme: 'grid', styles: { fontSize: 9 } });
-        y = doc.lastAutoTable.finalY + 6;
+        doc.autoTable({
+          startY: y,
+          head: [['Parameter', 'Value']],
+          body: userRows,
+          theme: 'striped',
+          headStyles: { fillColor: [0, 150, 255], textColor: 255, fontStyle: 'bold' },
+          styles: { fontSize: 10, cellPadding: 3 },
+          columnStyles: { 0: { fontStyle: 'bold', width: 40 } }
+        });
+        y = doc.lastAutoTable.finalY + 10;
       }
 
-      // Results
-      doc.text('Health Analysis', 14, y); y += 6;
+      // --- Check if tables overflowed page ---
+      if (y > pageHeight - 30) { doc.addPage(); y = 20; }
+
+      // --- Health Analysis ---
+      doc.setFontSize(12);
+      doc.setTextColor(0, 150, 255);
+      doc.text('Health Analysis', margin, y);
+      y += 6;
+
       if (bmiResult != null && bmrResult) {
-        const health = [ ['BMI', `${bmiResult} (${getBmiCategory(bmiResult)})`], ['BMR', `${bmrResult.bmr} kcal`], ['TDEE', `${bmrResult.tdee} kcal`], ['Target Calories', `${bmrResult.goalCalories} kcal`] ];
+        const healthRows = [
+          ['BMI', `${bmiResult} (${getBmiCategory(bmiResult)})`],
+          ['BMR (Basal Metabolic Rate)', `${bmrResult.bmr} kcal/day`],
+          ['TDEE (Total Expenditure)', `${bmrResult.tdee} kcal/day`],
+          ['Daily Calorie Target', `${bmrResult.goalCalories} kcal/day`]
+        ];
+
         if (doc.autoTable) {
-          doc.autoTable({ startY: y, head: [['Metric','Value']], body: health, theme: 'grid', styles: { fontSize: 9 } });
-          y = doc.lastAutoTable.finalY + 6;
+          doc.autoTable({
+            startY: y,
+            head: [['Metric', 'Result']],
+            body: healthRows,
+            theme: 'grid',
+            headStyles: { fillColor: [40, 40, 40], textColor: 255 },
+            styles: { fontSize: 10 },
+            columnStyles: { 0: { fontStyle: 'bold', width: 60 } }
+          });
+          y = doc.lastAutoTable.finalY + 10;
         }
+      } else {
+        doc.setFontSize(10);
+        doc.setTextColor(150, 0, 0);
+        doc.text('Please calculate your BMI/BMR to see health analysis.', margin, y);
+        y += 10;
       }
 
-      // Daily intake
+      // --- Daily Intake Logs ---
       if (type === 'daily') {
-        doc.text("Today's Intake", 14, y); y += 6;
+        if (y > pageHeight - 40) { doc.addPage(); y = 20; }
+
+        doc.setFontSize(12);
+        doc.setTextColor(0, 150, 255);
+        doc.text("Today's Food Log", margin, y);
+        y += 6;
+
         if (todayFood.length > 0 && doc.autoTable) {
-          const rows = todayFood.map(f => [f.mealType, f.name, `${f.calories} kcal`, `${f.protein}g`, `${f.carbs}g`, `${f.fats}g`]);
-          doc.autoTable({ startY: y, head: [['Meal','Food','Calories','Protein','Carbs','Fats']], body: rows, styles: { fontSize: 8 } });
-          y = doc.lastAutoTable.finalY + 6;
+          const foodRows = todayFood.map(f => [
+            f.mealType.charAt(0).toUpperCase() + f.mealType.slice(1),
+            f.name,
+            `${f.calories}`,
+            `${f.protein}g`,
+            `${f.carbs}g`,
+            `${f.fats}g`
+          ]);
+
+          // Calculate totals
+          const totals = todayFood.reduce((acc, f) => ({
+            c: acc.c + (Number(f.calories) || 0),
+            p: acc.p + (Number(f.protein) || 0),
+            cb: acc.cb + (Number(f.carbs) || 0),
+            f: acc.f + (Number(f.fats) || 0)
+          }), { c: 0, p: 0, cb: 0, f: 0 });
+
+          foodRows.push(['TOTAL', '', `${totals.c}`, `${totals.p}g`, `${totals.cb}g`, `${totals.f}g`]);
+
+          doc.autoTable({
+            startY: y,
+            head: [['Meal', 'Food Item', 'Calories', 'Protein', 'Carbs', 'Fats']],
+            body: foodRows,
+            theme: 'striped',
+            headStyles: { fillColor: [0, 180, 200], textColor: 255 },
+            footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold' },
+            styles: { fontSize: 9 },
+            didParseCell: function (data) {
+              if (data.row.index === foodRows.length - 1) {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.fillColor = [220, 240, 255];
+              }
+            }
+          });
+          y = doc.lastAutoTable.finalY + 10;
+        } else {
+          doc.setFontSize(10);
+          doc.setTextColor(100, 100, 100);
+          doc.text("No food entries logged for today.", margin, y);
+          y += 10;
         }
       }
 
-      // footer page counts
+      // --- Apply Watermark & Footer ---
+      addWatermark(doc);
+
       const pages = doc.internal.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
-        doc.text(`Page ${i} of ${pages}`, doc.internal.pageSize.width - 30, doc.internal.pageSize.height - 10);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Page ${i} of ${pages} | FitTronix AI Health Tracker`, pageWidth / 2, pageHeight - 10, { align: 'center' });
       }
 
-      const name = type === 'weekly' ? 'weekly-report.pdf' : 'daily-report.pdf';
-      doc.save(name);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = type === 'weekly' ? `fittronix-weekly-report-${timestamp}.pdf` : `fittronix-daily-report-${timestamp}.pdf`;
+
+
+      // Alternative Strategy: Open in New Tab
+      // This bypasses browser restrictions on programmatic downloads
+      const pdfData = doc.output('blob');
+      const url = URL.createObjectURL(pdfData);
+      window.open(url, '_blank');
+
+      // Cleanup after a delay (longer delay for viewing)
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
     } catch (e) {
       console.error('Failed to generate PDF', e);
       alert('Could not create PDF report.');
@@ -362,7 +550,7 @@ const HealthTracker = () => {
   // Small presentational subcomponents
   const TabButton = ({ tab, children }) => (
     <motion.button
-      className={`py-3 px-5 cursor-pointer font-medium transition-all duration-200 ${activeTab === tab ? 'border-b-2 border-blue-500 text-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+      className={`py-3 px-5 cursor-pointer font-medium transition-all duration-200 ${activeTab === tab ? 'border-b-2 border-cyan-500 text-cyan-400 bg-gray-700/50' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/30'}`}
       onClick={() => setActiveTab(tab)}
       whileHover={{ scale: 1.03 }}
       whileTap={{ scale: 0.97 }}
@@ -370,79 +558,77 @@ const HealthTracker = () => {
     >{children}</motion.button>
   );
 
-  const ProgressBar = ({ percentage = 0, nutrient = '', goal }) => {
-    const pct = Number(percentage) || 0;
-    const getColor = (p) => p > 100 ? 'bg-red-400' : p > 90 ? 'bg-yellow-400' : p > 70 ? 'bg-green-400' : 'bg-blue-400';
-    return (
-      <motion.div className="mb-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200" whileHover={{ scale: 1.01 }}>
-        <div className="flex justify-between mb-2">
-          <span className="font-medium text-gray-700">{nutrient}</span>
-          <div className="text-right">
-            <span className="font-semibold">{pct}%</span>
-            <div className="text-xs text-gray-500">{pct > 100 ? `Over ${nutrient} goal` : pct > 90 ? `Almost at ${nutrient} goal` : pct > 70 ? `Good progress` : `Keep going`}</div>
-          </div>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-          <div className={`h-3 rounded-full ${getColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-        </div>
-        {goal && <div className="text-xs text-gray-500 mt-1">Goal: {goal}</div>}
-      </motion.div>
-    );
-  };
+
 
   // Render
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl pt-[95px]">
+    <div className="container mx-auto px-4 py-8 max-w-6xl pt-[125px]">
       <motion.header className="text-center mb-8" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <h1 className="text-3xl md:text-4xl font-bold text-blue-600 mb-2">Health & Nutrition Tracker</h1>
-        <p className="text-gray-600 text-sm md:text-lg">BMI, BMR, food log, hydration tracker, charts & downloadable reports</p>
+        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-cyan-400 to-pink-500 bg-clip-text text-transparent mb-2">Health & Nutrition Tracker</h1>
+        <p className="text-gray-400 text-sm md:text-lg">BMI, BMR, food log, hydration tracker, charts & downloadable reports</p>
       </motion.header>
 
-      <div className="flex border-b mb-6 bg-white rounded-t-lg shadow-sm overflow-x-auto">
+      <div className="flex border-b border-gray-700 mb-6 bg-gray-800 rounded-t-lg shadow-sm overflow-x-auto">
         <TabButton tab="calculator">Calculator</TabButton>
         <TabButton tab="food-log">Food Log</TabButton>
         <TabButton tab="progress">Daily Progress</TabButton>
         <TabButton tab="report">Report</TabButton>
-        <TabButton tab="workout">Workout</TabButton>
       </div>
 
       <AnimatePresence mode="wait">
         <motion.div key={activeTab} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}>
 
           {activeTab === 'calculator' && (
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Personal Information</h2>
+            <div className="bg-gray-800 rounded-lg shadow-md p-6 mb-6 text-gray-200">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-semibold text-cyan-400">Personal Information</h2>
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className={`px-4 py-2 rounded-md font-medium transition-colors ${isEditing ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-gray-700 hover:bg-gray-600 text-cyan-400'}`}
+                >
+                  {isEditing ? 'Save Profile' : 'Edit Profile'}
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
-                  { label: 'Gender', name: 'gender', type: 'select', options: ['male','female'] },
+                  { label: 'Gender', name: 'gender', type: 'select', options: ['male', 'female'] },
                   { label: 'Age (years)', name: 'age', type: 'number', min: 1, max: 120 },
                   { label: 'Height (cm)', name: 'height', type: 'number', min: 50, max: 250 },
                   { label: 'Weight (kg)', name: 'weight', type: 'number', min: 10, max: 300 },
-                  { label: 'Activity Level', name: 'activityLevel', type: 'select', options: ['sedentary','light','moderate','active','extra'] },
-                  { label: 'Goal', name: 'goal', type: 'select', options: ['lose','maintain','gain'] },
-                  { label: 'Meals per Day', name: 'mealsPerDay', type: 'select', options: ['3','4','5','6'] },
-                  { label: 'Dietary Preference', name: 'dietaryPreference', type: 'select', options: ['balanced','vegetarian','vegan','lowCarb','keto'] },
+                  { label: 'Activity Level', name: 'activityLevel', type: 'select', options: ['sedentary', 'light', 'moderate', 'active', 'extra'] },
+                  { label: 'Goal', name: 'goal', type: 'select', options: ['lose', 'maintain', 'gain'] },
+                  { label: 'Meals per Day', name: 'mealsPerDay', type: 'select', options: ['3', '4', '5', '6'] },
+                  { label: 'Dietary Preference', name: 'dietaryPreference', type: 'select', options: ['balanced', 'vegetarian', 'vegan', 'lowCarb', 'keto'] },
                   { label: 'Allergies (optional)', name: 'allergies', type: 'text' },
                   { label: 'Health Conditions (optional)', name: 'healthConditions', type: 'text' }
                 ].map(field => (
                   <div key={field.name} className="mb-4">
-                    <label className="block text-gray-700 mb-2 font-medium" htmlFor={field.name}>{field.label}</label>
-                    {field.type === 'select' ? (
-                      <select id={field.name} name={field.name} value={userData[field.name]} onChange={handleUserChange} className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors[field.name] ? 'border-red-500' : 'border-gray-300'}`}>
-                        {field.options.map(opt => <option key={opt} value={opt}>{opt.charAt(0).toUpperCase()+opt.slice(1)}</option>)}
-                      </select>
+                    <label className="block text-gray-300 mb-2 font-medium" htmlFor={field.name}>{field.label}</label>
+                    {!isEditing ? (
+                      <div className="w-full px-3 py-2 border border-transparent bg-gray-700/30 text-gray-300 rounded-md">
+                        {field.type === 'select' && userData[field.name]
+                          ? userData[field.name].charAt(0).toUpperCase() + userData[field.name].slice(1)
+                          : userData[field.name] || '—'}
+                      </div>
                     ) : (
-                      <input id={field.name} name={field.name} value={userData[field.name]} onChange={handleUserChange} type={field.type} min={field.min} max={field.max} className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${validationErrors[field.name] ? 'border-red-500' : 'border-gray-300'}`} />
+                      field.type === 'select' ? (
+                        <select id={field.name} name={field.name} value={userData[field.name]} onChange={handleUserChange} className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-gray-700 border-gray-600 text-white ${validationErrors[field.name] ? 'border-red-500' : ''}`}>
+                          {field.options.map(opt => <option key={opt} value={opt}>{opt.charAt(0).toUpperCase() + opt.slice(1)}</option>)}
+                        </select>
+                      ) : (
+                        <input id={field.name} name={field.name} value={userData[field.name]} onChange={handleUserChange} type={field.type} min={field.min} max={field.max} className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-gray-700 border-gray-600 text-white ${validationErrors[field.name] ? 'border-red-500' : ''}`} />
+                      )
                     )}
-                    {validationErrors[field.name] && <p className="text-red-500 text-sm mt-1">{validationErrors[field.name]}</p>}
+                    {isEditing && validationErrors[field.name] && <p className="text-red-500 text-sm mt-1">{validationErrors[field.name]}</p>}
                   </div>
                 ))}
               </div>
 
               <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold">Results</h3>
-                  <div className="mt-3">
+                <div className="p-4 bg-gray-700/50 rounded-lg">
+                  <h3 className="font-semibold text-cyan-300">Results</h3>
+                  <div className="mt-3 text-gray-300">
                     <p><strong>BMI:</strong> {bmiResult ?? '—'} ({getBmiCategory(bmiResult)})</p>
                     <p><strong>BMR:</strong> {bmrResult ? `${bmrResult.bmr} kcal` : '—'}</p>
                     <p><strong>TDEE:</strong> {bmrResult ? `${bmrResult.tdee} kcal` : '—'}</p>
@@ -450,11 +636,11 @@ const HealthTracker = () => {
                   </div>
                 </div>
 
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-semibold">Suggestions</h3>
-                  <div className="mt-3">
+                <div className="p-4 bg-gray-700/50 rounded-lg">
+                  <h3 className="font-semibold text-green-400">Suggestions</h3>
+                  <div className="mt-3 text-gray-300">
                     <p><strong>Supplements:</strong> {getSupplements().join(', ')}</p>
-                    <p className="mt-2 text-sm text-gray-600">Food ideas: {getFoodSuggestions().breakfast.slice(0,2).join(' • ')}</p>
+                    <p className="mt-2 text-sm text-gray-400">Food ideas: {getFoodSuggestions().breakfast.slice(0, 2).join(' • ')}</p>
                   </div>
                 </div>
               </div>
@@ -487,13 +673,7 @@ const HealthTracker = () => {
             <ReportTab generateReport={generateReport} />
           )}
 
-          {activeTab === 'workout' && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <Suspense fallback={<div>Loading workout module...</div>}>
-                <WorkoutPage />
-              </Suspense>
-            </div>
-          )}
+          {activeTab === 'workout' && null}
 
         </motion.div>
       </AnimatePresence>
@@ -501,36 +681,158 @@ const HealthTracker = () => {
   );
 };
 
-// FoodLogTab component
-const FoodLogTab = ({ waterIntake, addWaterIntake, resetWaterIntake, newFood, handleFoodChange, addFoodEntry, todayFood, deleteFoodEntry, editFoodEntry, editingFoodId, cancelEdit, validationErrors }) => {
+const ProgressBar = ({ percentage = 0, nutrient = '', goal }) => {
+  const pct = Number(percentage) || 0;
+  const getColor = (p) => p > 100 ? 'bg-red-400' : p > 90 ? 'bg-yellow-400' : p > 70 ? 'bg-green-400' : 'bg-blue-400';
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-semibold mb-6 text-gray-800">Log Food & Water</h2>
+    <motion.div className="mb-4 p-4 bg-gray-700/50 rounded-lg shadow-sm border border-gray-600/50" whileHover={{ scale: 1.01 }}>
+      <div className="flex justify-between mb-2">
+        <span className="font-medium text-gray-300">{nutrient}</span>
+        <div className="text-right">
+          <span className="font-semibold text-cyan-300">{pct}%</span>
+          <div className="text-xs text-gray-400">{pct > 100 ? `Over ${nutrient} goal` : pct > 90 ? `Almost at ${nutrient} goal` : pct > 70 ? `Good progress` : `Keep going`}</div>
+        </div>
+      </div>
+      <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden border border-gray-600">
+        <div className={`h-3 rounded-full ${getColor(pct)}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      {goal && <div className="text-xs text-gray-500 mt-1">Goal: {goal}</div>}
+    </motion.div>
+  );
+};
 
-      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-100">
+// FoodLogTab component with Smart Search
+const FoodLogTab = ({ waterIntake, addWaterIntake, resetWaterIntake, newFood, handleFoodChange, addFoodEntry, todayFood, deleteFoodEntry, editFoodEntry, editingFoodId, cancelEdit, validationErrors }) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+
+  // Debounced search effect
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (searchQuery.length < 2) {
+        setResults([]);
+        setShowResults(false);
+        return;
+      }
+
+      setLoading(true);
+      setShowResults(true);
+
+      // 1. Local Search
+      const localMatches = PREDEFINED_FOODS.filter(f =>
+        f.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      // 2. API Search (only if query is long enough)
+      let apiMatches = [];
+      if (searchQuery.length >= 3) {
+        apiMatches = await searchOpenFoodFacts(searchQuery);
+      }
+
+      setResults([...localMatches, ...apiMatches]);
+      setLoading(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const selectFood = (food) => {
+    // Determine meal type (default to breakfast if not specified)
+    const currentHour = new Date().getHours();
+    let suggestedMeal = "snack";
+    if (currentHour < 11) suggestedMeal = "breakfast";
+    else if (currentHour < 15) suggestedMeal = "lunch";
+    else if (currentHour < 21) suggestedMeal = "dinner";
+
+    const event = {
+      target: {
+        name: 'batch_update', // Pseudo-event for batch update
+        value: {
+          name: food.name,
+          calories: food.calories,
+          protein: food.protein,
+          carbs: food.carbs,
+          fats: food.fats,
+          mealType: food.mealType || suggestedMeal
+        }
+      }
+    };
+
+    // We need to manually update state since handleFoodChange expects a regular event
+    // So we'll call handleFoodChange multiple times or refactor parent. 
+    // Easier: Just manually trigger changes for each field using the passed handler loop or similar.
+    // Actually, let's just cheat and call handleFoodChange with specific events
+    ['name', 'calories', 'protein', 'carbs', 'fats', 'mealType'].forEach(key => {
+      handleFoodChange({ target: { name: key, value: event.target.value[key] } });
+    });
+
+    setSearchQuery("");
+    setShowResults(false);
+  };
+
+  return (
+    <div className="bg-gray-800 rounded-lg shadow-md p-6 text-gray-200">
+      <h2 className="text-2xl font-semibold mb-6 text-cyan-400">Log Food & Water</h2>
+
+      <div className="mb-6 p-4 bg-gray-700/50 rounded-xl border border-cyan-500/20">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-blue-800">Water</h3>
-            <div className="text-sm text-gray-600">{waterIntake} glasses today</div>
+            <h3 className="font-semibold text-cyan-300">Water</h3>
+            <div className="text-sm text-gray-400">{waterIntake} glasses today</div>
           </div>
           <div className="flex gap-2">
-            <button className="bg-blue-600 text-white py-2 px-4 rounded" onClick={() => addWaterIntake(1)} disabled={waterIntake >= 20}>+ Add</button>
-            <button className="bg-gray-200 text-gray-700 py-2 px-4 rounded" onClick={resetWaterIntake}>Reset</button>
+            <button className="bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded transition-colors" onClick={() => addWaterIntake(1)} disabled={waterIntake >= 20}>+ Add</button>
+            <button className="bg-gray-600 hover:bg-gray-500 text-gray-200 py-2 px-4 rounded transition-colors" onClick={resetWaterIntake}>Reset</button>
           </div>
         </div>
-        {waterIntake > 12 && <div className="mt-3 text-sm text-yellow-800">You're drinking a lot — space it out.</div>}
+        {waterIntake > 12 && <div className="mt-3 text-sm text-yellow-500">You're drinking a lot — space it out.</div>}
+      </div>
+
+      {/* Smart Search Bar */}
+      <div className="mb-6 relative z-20">
+        <label className="block text-gray-300 mb-2 font-medium">Search Food (Auto-fill)</label>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search 'Chicken', 'Oatmeal', 'Apple'..."
+            className="w-full px-4 py-3 bg-gray-900 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {loading && <div className="absolute right-3 top-3 text-cyan-400 animate-spin">⌛</div>}
+
+          {showResults && results.length > 0 && (
+            <div className="absolute w-full mt-1 bg-gray-900 border border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto z-30">
+              {results.map((item, index) => (
+                <button
+                  key={index}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-800 border-b border-gray-800 last:border-0 flex justify-between items-center group"
+                  onClick={() => selectFood(item)}
+                >
+                  <div>
+                    <div className="font-medium text-gray-200 group-hover:text-cyan-400 transition-colors">{item.name}</div>
+                    <div className="text-xs text-gray-500">{item.calories} kcal | P: {item.protein} | C: {item.carbs} | F: {item.fats}</div>
+                  </div>
+                  {item.source === 'OpenFoodFacts' && <span className="text-[10px] bg-blue-900/50 text-blue-300 px-1 rounded">WEB</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        {[ {label:'Food Name', name:'name', type:'text'}, {label:'Meal Type', name:'mealType', type:'select', options:['breakfast','lunch','dinner','snack']}, {label:'Calories', name:'calories', type:'number'}, {label:'Protein (g)', name:'protein', type:'number'}, {label:'Carbs (g)', name:'carbs', type:'number'}, {label:'Fats (g)', name:'fats', type:'number'} ].map(f => (
+        {[{ label: 'Food Name', name: 'name', type: 'text' }, { label: 'Meal Type', name: 'mealType', type: 'select', options: ['breakfast', 'lunch', 'dinner', 'snack'] }, { label: 'Calories', name: 'calories', type: 'number' }, { label: 'Protein (g)', name: 'protein', type: 'number' }, { label: 'Carbs (g)', name: 'carbs', type: 'number' }, { label: 'Fats (g)', name: 'fats', type: 'number' }].map(f => (
           <div key={f.name}>
-            <label className="block text-gray-700 mb-1">{f.label}</label>
+            <label className="block text-gray-300 mb-1">{f.label}</label>
             {f.type === 'select' ? (
-              <select name={f.name} value={newFood[f.name]} onChange={handleFoodChange} className={`w-full px-3 py-2 border rounded ${validationErrors[f.name] ? 'border-red-500' : 'border-gray-300'}`}>
+              <select name={f.name} value={newFood[f.name]} onChange={handleFoodChange} className={`w-full px-3 py-2 border rounded bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${validationErrors[f.name] ? 'border-red-500' : ''}`}>
                 {f.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
               </select>
             ) : (
-              <input name={f.name} value={newFood[f.name]} onChange={handleFoodChange} type={f.type} className={`w-full px-3 py-2 border rounded ${validationErrors[f.name] ? 'border-red-500' : 'border-gray-300'}`} />
+              <input name={f.name} value={newFood[f.name]} onChange={handleFoodChange} type={f.type} className={`w-full px-3 py-2 border rounded bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 ${validationErrors[f.name] ? 'border-red-500' : ''}`} />
             )}
             {validationErrors[f.name] && <div className="text-red-500 text-xs">{validationErrors[f.name]}</div>}
           </div>
@@ -538,26 +840,26 @@ const FoodLogTab = ({ waterIntake, addWaterIntake, resetWaterIntake, newFood, ha
       </div>
 
       <div className="flex gap-3 mb-6">
-        <button onClick={addFoodEntry} className={`py-2 px-4 rounded ${editingFoodId ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'}`}>{editingFoodId ? 'Update' : 'Add Food'}</button>
-        {editingFoodId && <button onClick={cancelEdit} className="py-2 px-4 rounded bg-gray-200">Cancel</button>}
+        <button onClick={addFoodEntry} className={`py-2 px-4 rounded transition-colors ${editingFoodId ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-cyan-600 hover:bg-cyan-500 text-white'}`}>{editingFoodId ? 'Update' : 'Add Food'}</button>
+        {editingFoodId && <button onClick={cancelEdit} className="py-2 px-4 rounded bg-gray-600 text-gray-200 hover:bg-gray-500">Cancel</button>}
       </div>
 
       <div>
-        <h3 className="text-xl mb-3">Today's Intake</h3>
+        <h3 className="text-xl mb-3 text-cyan-300">Today's Intake</h3>
         {todayFood.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 bg-gray-50 rounded">No entries yet — add your first meal.</div>
+          <div className="text-center py-8 text-gray-500 bg-gray-700/30 rounded border border-gray-700 border-dashed">No entries yet — add your first meal.</div>
         ) : (
           <div className="space-y-3">
             {todayFood.map(f => (
-              <div key={f.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border">
+              <div key={f.id} className="flex justify-between items-center p-3 bg-gray-700/40 rounded border border-gray-700 hover:border-cyan-500/30 transition-colors">
                 <div>
-                  <div className="flex items-center gap-2"><span className="capitalize font-semibold">{f.mealType}</span><span className="text-lg font-bold">{f.name}</span></div>
-                  <div className="text-sm text-gray-600">{f.calories} kcal • P: {f.protein}g • C: {f.carbs}g • F: {f.fats}g</div>
+                  <div className="flex items-center gap-2"><span className="capitalize font-semibold text-cyan-200">{f.mealType}</span><span className="text-lg font-bold text-white">{f.name}</span></div>
+                  <div className="text-sm text-gray-400">{f.calories} kcal • P: {f.protein}g • C: {f.carbs}g • F: {f.fats}g</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-xs text-gray-500 mr-2">{f.time}</div>
-                  <button onClick={() => editFoodEntry(f)} className="text-blue-500">✏️</button>
-                  <button onClick={() => deleteFoodEntry(f.id)} className="text-red-500">🗑️</button>
+                  <button onClick={() => editFoodEntry(f)} className="text-blue-400 hover:text-blue-300">✏️</button>
+                  <button onClick={() => deleteFoodEntry(f.id)} className="text-red-400 hover:text-red-300">🗑️</button>
                 </div>
               </div>
             ))}
@@ -573,11 +875,11 @@ const ProgressTab = ({ progress, waterIntake, setWaterIntake, dietPlan, weeklyCh
   const waterPct = Math.min(100, Math.round((waterIntake / 8) * 100));
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-2xl font-semibold mb-4">Daily Progress</h2>
+    <div className="bg-gray-800 rounded-lg shadow-md p-6 text-gray-200">
+      <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Daily Progress</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-          <h3 className="font-semibold mb-3">Nutrition</h3>
+          <h3 className="font-semibold mb-3 text-gray-300">Nutrition</h3>
           <ProgressBar percentage={progress.calories} nutrient="Calories" goal={dietPlan ? `${dietPlan.calories} kcal` : '—'} />
           <ProgressBar percentage={progress.protein} nutrient="Protein" goal={dietPlan ? `${dietPlan.protein} g` : '—'} />
           <ProgressBar percentage={progress.carbs} nutrient="Carbs" goal={dietPlan ? `${dietPlan.carbs} g` : '—'} />
@@ -585,33 +887,41 @@ const ProgressTab = ({ progress, waterIntake, setWaterIntake, dietPlan, weeklyCh
         </div>
 
         <div>
-          <h3 className="font-semibold mb-3">Hydration</h3>
-          <div className="p-4 bg-blue-50 rounded-lg mb-6">
-            <div className="text-center text-3xl font-bold text-blue-600">{waterIntake}/8</div>
-            <div className="text-center text-sm text-gray-600">Glasses today</div>
-            <div className="mt-3 w-full bg-blue-200 rounded-full h-4 overflow-hidden"><div className="h-4 bg-blue-500" style={{ width: `${waterPct}%` }} /></div>
+          <h3 className="font-semibold mb-3 text-gray-300">Hydration</h3>
+          <div className="p-4 bg-gray-700/50 rounded-lg mb-6 border border-cyan-500/20">
+            <div className="text-center text-3xl font-bold text-cyan-400">{waterIntake}/8</div>
+            <div className="text-center text-sm text-gray-400">Glasses today</div>
+            <div className="mt-3 w-full bg-gray-600 rounded-full h-4 overflow-hidden"><div className="h-4 bg-cyan-500" style={{ width: `${waterPct}%` }} /></div>
             <div className="mt-3 grid grid-cols-8 gap-2">
-              {[...Array(8)].map((_,i) => (
-                <button key={i} className={`w-8 h-8 rounded-full border ${i < waterIntake ? 'bg-blue-500 text-white' : 'bg-white text-blue-500'}`} onClick={() => setWaterIntake(i+1)} aria-label={`Set water to ${i+1}`}>
-                  {i+1}
+              {[...Array(8)].map((_, i) => (
+                <button key={i} className={`w-8 h-8 rounded-full border border-gray-600 transition-colors ${i < waterIntake ? 'bg-cyan-600 text-white' : 'bg-gray-700 text-cyan-400 hover:bg-gray-600'}`} onClick={() => setWaterIntake(i + 1)} aria-label={`Set water to ${i + 1}`}>
+                  {i + 1}
                 </button>
               ))}
             </div>
           </div>
 
-          <h3 className="font-semibold mb-3">Weekly Intake (calories)</h3>
+          <h3 className="font-semibold mb-3 text-gray-300">Weekly Intake (calories)</h3>
           <div style={{ width: '100%', height: 220 }}>
-            <ResponsiveContainer>
-              <BarChart data={weeklyChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="calories" name="Calories" />
-                <Bar dataKey="protein" name="Protein" />
-              </BarChart>
-            </ResponsiveContainer>
+            {weeklyChartData && weeklyChartData.length > 0 ? (
+              <ResponsiveContainer>
+                <BarChart data={weeklyChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="day" stroke="#9CA3AF" />
+                  <YAxis stroke="#9CA3AF" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', color: '#F3F4F6' }}
+                  />
+                  <Legend wrapperStyle={{ color: '#9CA3AF' }} />
+                  <Bar dataKey="calories" name="Calories" fill="#22D3EE" />
+                  <Bar dataKey="protein" name="Protein" fill="#A78BFA" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500 border border-gray-700 border-dashed rounded">
+                No data for chart
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -620,21 +930,21 @@ const ProgressTab = ({ progress, waterIntake, setWaterIntake, dietPlan, weeklyCh
 };
 
 const ReportTab = ({ generateReport }) => (
-  <div className="bg-white rounded-lg shadow-md p-6">
-    <h2 className="text-2xl font-semibold mb-4">Generate Reports</h2>
+  <div className="bg-gray-800 rounded-lg shadow-md p-6 text-gray-200">
+    <h2 className="text-2xl font-semibold mb-4 text-cyan-400">Generate Reports</h2>
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div className="p-6 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg text-center">
+      <div className="p-6 bg-gradient-to-br from-blue-900/40 to-cyan-900/40 border border-cyan-500/20 rounded-lg text-center hover:border-cyan-500/40 transition-all">
         <div className="text-4xl mb-3">📊</div>
-        <h3 className="font-semibold mb-2">Daily Report</h3>
-        <p className="text-sm text-gray-600 mb-4">Download a PDF summary of today's intake.</p>
-        <button onClick={() => generateReport('daily')} className="bg-blue-600 text-white py-2 px-4 rounded">Download Daily</button>
+        <h3 className="font-semibold mb-2 text-cyan-200">Daily Report</h3>
+        <p className="text-sm text-gray-400 mb-4">Download a PDF summary of today's intake.</p>
+        <button onClick={() => generateReport('daily')} className="bg-cyan-600 hover:bg-cyan-500 text-white py-2 px-4 rounded transition-colors">Download Daily</button>
       </div>
 
-      <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-100 rounded-lg text-center">
+      <div className="p-6 bg-gradient-to-br from-green-900/40 to-emerald-900/40 border border-green-500/20 rounded-lg text-center hover:border-green-500/40 transition-all">
         <div className="text-4xl mb-3">📈</div>
-        <h3 className="font-semibold mb-2">Weekly Report</h3>
-        <p className="text-sm text-gray-600 mb-4">Summary of the last 7 days.</p>
-        <button onClick={() => generateReport('weekly')} className="bg-green-600 text-white py-2 px-4 rounded">Download Weekly</button>
+        <h3 className="font-semibold mb-2 text-green-200">Weekly Report</h3>
+        <p className="text-sm text-gray-400 mb-4">Summary of the last 7 days.</p>
+        <button onClick={() => generateReport('weekly')} className="bg-green-600 hover:bg-green-500 text-white py-2 px-4 rounded transition-colors">Download Weekly</button>
       </div>
     </div>
   </div>

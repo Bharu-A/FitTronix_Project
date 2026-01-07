@@ -29,6 +29,8 @@ import RequireAdmin from "./components/RequireAdmin";
 import FitTronixProPlan from "./components/subscribe/FitTronixProPlan";
 import FitTronixElitePlan from "./components/subscribe/FitTronixElitePlan";
 import FitTronixOnboarding from "./pages/FitTronixOnboarding";
+import HowItWorksPage from "./pages/HowItWorksPage";
+import ProgressPage from "./pages/ProgressPage";
 
 
 
@@ -65,9 +67,8 @@ function Layout({ children }) {
 
       {/* Main Content */}
       <div
-        className={`flex-1 transition-all duration-300 ${
-          !hideSidebar && isOpen ? "lg:ml-64" : "ml-0"
-        }`}
+        className={`flex-1 transition-all duration-300 ${!hideSidebar && isOpen ? "lg:ml-64" : "ml-0"
+          }`}
       >
         {!hideSidebar && <Navbar toggleSidebar={() => setIsOpen(!isOpen)} />}
         {children}
@@ -96,6 +97,8 @@ function App() {
           <Route path="/fitTronixSettings" element={<FitTronixSettings />} />
           <Route path="/aICoachPage" element={<AICoachPage />} />
           <Route path="/about" element={<About />} />
+          <Route path="/progress" element={<ProgressPage />} />
+          <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacyPolicy" element={<PrivacyPolicy />} />
           <Route path="/blog" element={<Blog />} />
@@ -104,7 +107,7 @@ function App() {
           <Route path="/fitronixElitePlan" element={<FitTronixElitePlan />} />
           <Route path="/fitronixProPlan" element={<FitTronixProPlan />} />
           <Route path="/fitronixOnboarding" element={<FitTronixOnboarding />} />
-          <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboardPage/></RequireAdmin>} />
+          <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboardPage /></RequireAdmin>} />
 
         </Routes>
       </Layout>

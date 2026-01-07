@@ -18,7 +18,7 @@ export default function DeepFeatures({ features = [], loading = true }) {
   const list = features.length ? features : fallback;
 
   return (
-    <section className="py-40 bg-[#0F1115]">
+    <section id="features" className="py-40 bg-[#0F1115]">
       <div className="max-w-7xl mx-auto px-6 md:px-8">
         <h3 className="text-3xl font-semibold text-[#E4E6EB]">Features in depth</h3>
         <p className="mt-2 text-[#A8B0BB] max-w-2xl">Advanced capabilities engineered for athletes and coaches.</p>

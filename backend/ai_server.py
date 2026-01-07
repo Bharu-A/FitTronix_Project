@@ -40,6 +40,7 @@ class PoseAnalyzer:
         self.accuracy_history = deque(maxlen=30) # Store last 30 frames of accuracy
         self.last_feedback_time = 0
         self.bad_form_counter = 0
+        self.prev_landmarks = None # For smoothing
         
         # Exercise specific thresholds
         self.exercises = {
@@ -63,6 +64,33 @@ class PoseAnalyzer:
             angle = 360-angle
         return angle
 
+    def smooth_landmarks(self, landmarks):
+        """Apply Exponential Moving Average smoothing to landmarks."""
+        if self.prev_landmarks is None:
+            self.prev_landmarks = landmarks
+            return landmarks
+        
+        smoothed = []
+        alpha = 0.7 # Smoothing factor (lower = smoother but more lag)
+        
+        for i, lm in enumerate(landmarks):
+            prev = self.prev_landmarks[i]
+            # Smooth x, y, z
+            sx = alpha * lm.x + (1 - alpha) * prev.x
+            sy = alpha * lm.y + (1 - alpha) * prev.y
+            sz = alpha * lm.z + (1 - alpha) * prev.z
+            vis = lm.visibility # Don't smooth visibility
+            
+            # Create a localized object similar to the original landmark
+            class Landmark:
+                pass
+            s_lm = Landmark()
+            s_lm.x, s_lm.y, s_lm.z, s_lm.visibility = sx, sy, sz, vis
+            smoothed.append(s_lm)
+            
+        self.prev_landmarks = smoothed
+        return smoothed
+
     def detect_exercise(self, landmarks):
         """Heuristic to detect exercise based on pose."""
         # Get key landmarks
@@ -81,10 +109,10 @@ class PoseAnalyzer:
         hip_y = (left_hip.y + right_hip.y) / 2
         ankle_y = (left_ankle.y + right_ankle.y) / 2
         
-        is_horizontal = abs(shoulder_y - ankle_y) < 0.2 # Rough check
+        # In video coordinates, y increases downwards.
+        is_horizontal = abs(shoulder_y - ankle_y) < 0.25 
         
         if is_horizontal:
-            # Likely Pushup
             return "pushup"
         
         # Vertical exercises
@@ -92,39 +120,45 @@ class PoseAnalyzer:
         # 2. Check for Pullup (Hands above head)
         hands_above_head = (left_wrist.y < nose.y) and (right_wrist.y < nose.y)
         if hands_above_head:
+            # Differentiate from Jumping Jack: Jumping jack hands move continuously
+            # Pullup users hang. This is tricky without temporal analysis.
+            # Defaulting to pullup if purely static hands up, but let's favor jumping jack if wide.
             return "pullup"
             
-        # 3. Check for Jumping Jack (Hands moving up/out wide)
-        hands_wide = abs(left_wrist.x - right_wrist.x) > abs(left_shoulder.x - right_shoulder.x) * 1.5
-        if hands_wide or hands_above_head: # Jumping jacks often have hands above head too
+        # 3. Check for Jumping Jack (Hands wide)
+        hands_wide = abs(left_wrist.x - right_wrist.x) > abs(left_shoulder.x - right_shoulder.x) * 2.0
+        if hands_wide:
              return "jumping_jack"
 
         # 4. Squat vs Lunge
-        # Lunge has significant x-difference between feet (if side view) or y-difference (if front view and stepping)
-        # For simplicity, default to Squat if feet are roughly aligned, Lunge if split
-        feet_split_y = abs(left_ankle.y - right_ankle.y) > 0.1
+        feet_split_y = abs(left_ankle.y - right_ankle.y) > 0.15
         if feet_split_y:
             return "lunge"
             
         return "squat"
 
     def analyze_pose(self, landmarks):
-        # Auto-detect exercise if not locked in (or just always detect for now)
-        detected = self.detect_exercise(landmarks)
+        # Apply smoothing
+        smoothed_landmarks = self.smooth_landmarks(landmarks)
         
-        # Simple hysteresis/smoothing could be added here
-        self.current_exercise = detected
+        # Auto-detect exercise 
+        detected = self.detect_exercise(smoothed_landmarks)
         
-        if detected == "squat":
-            return self.analyze_squat(landmarks)
-        elif detected == "pushup":
-            return self.analyze_pushup(landmarks)
-        elif detected == "lunge":
-            return self.analyze_lunge(landmarks)
-        elif detected == "jumping_jack":
-            return self.analyze_jumping_jack(landmarks)
-        elif detected == "pullup":
-            return self.analyze_pullup(landmarks)
+        # Simple hysteresis could be added here to prevent rapid switching
+        if self.current_exercise == "Detecting..." or self.current_exercise != detected:
+             # Add a counter here for robustness (not implemented for brevity)
+             self.current_exercise = detected
+        
+        if self.current_exercise == "squat":
+            return self.analyze_squat(smoothed_landmarks)
+        elif self.current_exercise == "pushup":
+            return self.analyze_pushup(smoothed_landmarks)
+        elif self.current_exercise == "lunge":
+            return self.analyze_lunge(smoothed_landmarks)
+        elif self.current_exercise == "jumping_jack":
+            return self.analyze_jumping_jack(smoothed_landmarks)
+        elif self.current_exercise == "pullup":
+            return self.analyze_pullup(smoothed_landmarks)
         
         return {"feedback": ["Unknown exercise"], "accuracy": 0, "is_correct": False}
 
@@ -139,30 +173,40 @@ class PoseAnalyzer:
         is_correct = True
         accuracy = 0
         
-        # Rep counting
-        if angle > 160 and self.stage == "down":
+        # Standing state (Loosened to 155 from 165)
+        if angle > 155:
+            self.stage = "up"
+            accuracy = 100
+            
+        # Rep counting logic
+        if angle > 155 and self.stage == "down":
             self.stage = "up"
             self.reps += 1
             feedback.append("Good rep!")
 
-        # Accuracy logic
-        if angle > 160: # Standing
-            accuracy = 100
-            self.stage = "up"
-        if angle < 100: # Deep squat
-            self.stage = "down"
-            accuracy = 100
+        # Descent logic
+        if angle < 140:
+            if self.stage == "up":
+                self.stage = "down_progress"
             
-        # Form feedback
-        if angle < 70:
+            # Depth check (Loosened to 110 from 95)
+            if angle < 110: # Good depth (approx parallel)
+                self.stage = "down"
+                accuracy = 100
+                is_correct = True
+            elif angle < 125: # Getting there
+                 accuracy = 80
+                 feedback.append("Go a bit lower")
+            else: # Too high
+                accuracy = 50
+                if self.stage == "down_progress": 
+                    feedback.append("Go lower!")
+        
+        # Form faults
+        if angle < 65: # Too deep
             feedback.append("Too deep!")
-            is_correct = False
-            accuracy = 50
-        elif angle < 140 and angle > 100 and self.stage == "down":
-             feedback.append("Go lower!")
-             is_correct = False
-             accuracy = 60
-             
+            accuracy = 80 
+            
         return {
             "exercise": "squat", 
             "feedback": feedback, 
@@ -184,27 +228,42 @@ class PoseAnalyzer:
         is_correct = True
         accuracy = 0
         
-        if angle > 160 and self.stage == "down":
+        # Up state (Loosened to 150)
+        if angle > 150:
+            self.stage = "up"
+            accuracy = 100
+            
+        if angle > 150 and self.stage == "down":
             self.stage = "up"
             self.reps += 1
             feedback.append("Pushup completed!")
 
-        if angle > 160:
-            self.stage = "up"
-            accuracy = 100
-        if angle < 90:
-            self.stage = "down"
-            accuracy = 100
-            
-        if angle < 160 and angle > 90 and self.stage == "down":
-            feedback.append("Go lower!")
-            is_correct = False
-            accuracy = 50
+        # Down state
+        if angle < 150:
+            if angle < 100: # Good depth (90 degrees + margin)
+                self.stage = "down"
+                accuracy = 100
+            elif angle < 120:
+                self.stage = "down" # Allow shallow reps to count but penalize score
+                accuracy = 80
+            else:
+                 accuracy = 60
+                 feedback.append("Lower your chest")
+                 
+        # Body alignment check
+        hip = [landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y]
+        ankle = [landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y]
+        shoulder_hip_angle = self.calculate_angle(shoulder, hip, ankle)
+        
+        if shoulder_hip_angle < 150: # Loosened align check
+             feedback.append("Keep body straight!")
+             is_correct = False
+             accuracy -= 20
             
         return {
             "exercise": "pushup", 
             "feedback": feedback, 
-            "accuracy": accuracy, 
+            "accuracy": max(0, accuracy), 
             "is_correct": is_correct, 
             "reps": self.reps,
             "current_angle": int(angle),
@@ -223,17 +282,20 @@ class PoseAnalyzer:
         is_correct = True
         accuracy = 0
         
-        if angle > 160 and self.stage == "down":
+        if angle > 155 and self.stage == "down":
             self.stage = "up"
             self.reps += 1
             feedback.append("Lunge completed!")
 
-        if angle > 160:
+        if angle > 155:
             self.stage = "up"
             accuracy = 100
-        if angle < 100:
+        elif angle < 110:
             self.stage = "down"
             accuracy = 100
+        else:
+             accuracy = 70
+             feedback.append("Go deeper")
             
         return {
             "exercise": "lunge", 
@@ -264,15 +326,12 @@ class PoseAnalyzer:
             self.stage = "down"
             accuracy = 100
             
-        if self.stage == "down" and l_wrist[1] < l_shoulder[1]: # Transition to up
-             pass
-        
         if self.stage == "up" and l_wrist[1] > l_hip[1]: # Completed cycle
             self.stage = "down"
             self.reps += 1
             feedback.append("Jumping Jack!")
             
-        return {"exercise": "jumping_jack", "feedback": feedback, "accuracy": accuracy, "is_correct": is_correct, "reps": self.reps}
+        return {"exercise": "jumping_jack", "feedback": feedback, "accuracy": accuracy, "is_correct": is_correct, "reps": self.reps, "current_angle": 0, "stage": self.stage}
 
     def analyze_pullup(self, landmarks):
         l_shoulder = [landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y]
@@ -297,7 +356,7 @@ class PoseAnalyzer:
             self.stage = "up"
             accuracy = 100
             
-        return {"exercise": "pullup", "feedback": feedback, "accuracy": accuracy, "is_correct": is_correct, "reps": self.reps}
+        return {"exercise": "pullup", "feedback": feedback, "accuracy": accuracy, "is_correct": is_correct, "reps": self.reps, "current_angle": int(angle), "stage": self.stage}
 
     def check_bad_form(self, accuracy):
         self.accuracy_history.append(accuracy)
@@ -310,10 +369,12 @@ class PoseAnalyzer:
             
         if self.bad_form_counter > 30: # ~3 seconds of consistent bad form
             self.bad_form_counter = 0 # Reset
+            # Return tutorial URL
             return self.exercises.get(self.current_exercise, {}).get("url")
         return None
 
 # Global analyzer instance (for single user prototype)
+# In a real multi-user app, this would be a dictionary of analyzers by session_id
 analyzer = PoseAnalyzer()
 
 @app.post("/analyze_video")
@@ -331,35 +392,42 @@ async def analyze_video(file: UploadFile = File(...)):
         
     video_analyzer = PoseAnalyzer()
     
-    total_frames = 0
-    detected_exercises = {}
-    all_feedback = []
-    total_accuracy = 0
-    
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        total_frames += 1
+    # Use a fresh Pose instance for each video to reset tracking state
+    with mp_pose.Pose(
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+        model_complexity=1
+    ) as local_pose:
         
-        # Skip frames for speed (process every 3rd frame)
-        if total_frames % 3 != 0:
-            continue
-            
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pose.process(frame_rgb)
+        total_frames = 0
+        detected_exercises = {}
+        all_feedback = []
+        total_accuracy = 0
         
-        if results.pose_landmarks:
-            analysis = video_analyzer.analyze_pose(results.pose_landmarks.landmark)
-            
-            ex = analysis.get("exercise", "unknown")
-            detected_exercises[ex] = detected_exercises.get(ex, 0) + 1
-            
-            if analysis.get("feedback"):
-                all_feedback.extend(analysis["feedback"])
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
                 
-            total_accuracy += analysis.get("accuracy", 0)
+            total_frames += 1
+            
+            # Skip frames for speed (process every 3rd frame)
+            if total_frames % 3 != 0:
+                continue
+                
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = local_pose.process(frame_rgb)
+            
+            if results.pose_landmarks:
+                analysis = video_analyzer.analyze_pose(results.pose_landmarks.landmark)
+                
+                ex = analysis.get("exercise", "unknown")
+                detected_exercises[ex] = detected_exercises.get(ex, 0) + 1
+                
+                if analysis.get("feedback"):
+                    all_feedback.extend(analysis["feedback"])
+                    
+                total_accuracy += analysis.get("accuracy", 0)
             
     cap.release()
     os.unlink(temp_video_path) # Clean up
@@ -404,6 +472,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 
+                # Check if frame is valid
+                if frame is None:
+                     continue
+
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 results = pose.process(frame_rgb)
                 
@@ -440,6 +512,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 print("Invalid JSON received")
             except Exception as e:
                 print(f"Error processing frame: {e}")
+                traceback.print_exc()
                 
     except WebSocketDisconnect:
         print("Client disconnected")

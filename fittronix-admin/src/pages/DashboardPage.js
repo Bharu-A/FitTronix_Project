@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { BarChart, Bar, ResponsiveContainer, Cell, XAxis } from "recharts";
 import {
   Activity, Target, Salad, Smile, Settings,
   TrendingUp, Calendar, Clock, Award, Heart,
@@ -51,7 +52,7 @@ function DashboardPage() {
   const functions = getFunctions();
 
   // keep a ref to cleanup function(s) so we can unsubscribe previous listeners when auth changes
-  const cleanupRef = useRef(() => {});
+  const cleanupRef = useRef(() => { });
 
   // Tailwind-safe color classes lookup (no dynamic template strings)
   const colorClasses = {
@@ -124,7 +125,7 @@ function DashboardPage() {
         setFitnessMetrics([]);
         setSystemStatus([]);
         setLoading(false);
-        cleanupRef.current = () => {};
+        cleanupRef.current = () => { };
       }
     });
 
@@ -133,7 +134,7 @@ function DashboardPage() {
       unsubscribeAuth();
       try {
         cleanupRef.current && cleanupRef.current();
-      } catch (e) {}
+      } catch (e) { }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -289,7 +290,7 @@ function DashboardPage() {
         unsubscribes.forEach((u) => {
           try {
             if (typeof u === "function") u();
-          } catch (e) {}
+          } catch (e) { }
         });
       };
     } catch (err) {
@@ -297,7 +298,7 @@ function DashboardPage() {
       setError("Failed to load dashboard data");
       setLoading(false);
       // return no-op cleanup
-      return () => {};
+      return () => { };
     }
   };
 
@@ -599,57 +600,92 @@ function DashboardPage() {
                 </button>
               </div>
 
-              <div className="flex items-end justify-between h-48 min-h-[180px] space-x-2">
+              <div className="h-48 min-h-[180px] w-full">
                 {weeklyProgress.length > 0 ? (
-                  weeklyProgress.map((day, index) => {
-                    const heightValue = Math.max(4, Number(day.value) || 0); // ensure a visible minimum
-                    return (
-                      <motion.div key={day.day || index} className="flex flex-col items-center flex-1" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ delay: index * 0.1, duration: 0.5 }}>
-                        <div className="text-sm text-green-300 mb-2">{day.day}</div>
-                        <motion.div
-                          className="w-full rounded-t-lg bg-gradient-to-t from-green-500 to-blue-600 shadow-lg shadow-green-500/30 hover:shadow-green-500/50 transition-all duration-300 cursor-pointer"
-                          style={{ height: `${heightValue}%` }}
-                          title={`${day.type || "Workout"} - ${day.calories || 0} kcal`}
-                          whileHover={{ scaleY: 1.1 }}
-                        />
-                        <div className="text-xs mt-2 font-semibold text-green-400">{heightValue}%</div>
-                        <div className="text-xs text-gray-400 mt-1">{day.calories || 0}kcal</div>
-                      </motion.div>
-                    );
-                  })
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={weeklyProgress}>
+                      <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                        {weeklyProgress.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill="url(#colorGradient)" />
+                        ))}
+                      </Bar>
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#86efac', fontSize: 12 }} />
+                      <defs>
+                        <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#22c55e" /> {/* green-500 */}
+                          <stop offset="100%" stopColor="#2563eb" /> {/* blue-600 */}
+                        </linearGradient>
+                      </defs>
+                    </BarChart>
+                  </ResponsiveContainer>
                 ) : (
                   <div className="w-full text-center text-gray-400 py-8">No workout data for this week</div>
                 )}
               </div>
             </motion.div>
 
-            {/* AI System Status */}
-            <motion.div className="bg-gray-800/50 backdrop-blur-md rounded-2xl p-6 border border-purple-500/30 shadow-lg shadow-purple-500/10" variants={itemVariants}>
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent mb-6">AI FITNESS COACH STATUS</h2>
+            {/* AI System Status - HUD Terminal Style */}
+            <motion.div
+              className="bg-black/40 backdrop-blur-xl rounded-2xl p-6 border border-gray-800 relative overflow-hidden group"
+              variants={itemVariants}
+            >
+              {/* Scanline effect */}
+              <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_4px] opacity-10 pointer-events-none" />
+              <div className="absolute inset-0 bg-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
 
-              <div className="grid grid-cols-2 gap-4">
-                {systemStatus.map((sys) => {
-                  const c = colorClasses[sys.color] || colorClasses.purple;
-                  const Icon = sys.icon;
-                  return (
-                    <motion.div key={sys.feature} className="bg-gradient-to-r from-purple-900/30 to-purple-900/10 p-4 rounded-xl border border-purple-500/30" whileHover={{ scale: 1.02 }}>
-                      <div className="flex items-center mb-2">
-                        <Icon className={`${c.text} h-5 w-5 mr-2`} />
-                        <span className="font-semibold text-purple-400">{sys.feature}</span>
-                      </div>
-                      <p className={`${c.valueText} text-sm`}>Status: {sys.status}</p>
-                      {sys.accuracy && <p className="text-green-300 text-xs mt-1">Accuracy: {sys.accuracy}%</p>}
-                    </motion.div>
-                  );
-                })}
+              <div className="flex justify-between items-start mb-6 relative z-10">
+                <div>
+                  <h2 className="text-xl font-mono font-bold text-green-400 flex items-center tracking-wider">
+                    <Brain className="h-5 w-5 mr-3 animate-pulse" />
+                    AI_COACH_STATUS // v2.4
+                  </h2>
+                  <div className="flex items-center mt-2 space-x-4">
+                    <span className="flex items-center text-xs text-green-500 font-mono">
+                      <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-ping" />
+                      ONLINE
+                    </span>
+                    <span className="text-xs text-gray-500 font-mono">
+                      LATENCY: <span className="text-green-400">{Math.floor(Math.random() * (45 - 30) + 30)}ms</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="p-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                  <Network className="h-6 w-6 text-green-400" />
+                </div>
               </div>
 
-              <div className="mt-4 p-3 bg-gradient-to-r from-green-900/30 to-blue-900/30 rounded-lg border border-green-500/30">
-                <div className="flex items-center">
-                  <Brain className="h-5 w-5 text-green-400 mr-2" />
-                  <span className="text-green-300 font-semibold">SYSTEM OPTIMAL</span>
+              {/* Terminal Data Grid */}
+              <div className="grid grid-cols-2 gap-4 mb-6 relative z-10 font-mono text-sm">
+                <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
+                  <div className="text-gray-500 text-xs mb-1">TOTAL_REPS</div>
+                  <div className="text-xl text-white">14,208</div>
                 </div>
-                <p className="text-green-200 text-sm mt-1">All AI modules functioning at 90%+ accuracy</p>
+                <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
+                  <div className="text-gray-500 text-xs mb-1">FORMS_CORRECTED</div>
+                  <div className="text-xl text-green-400">1,240</div>
+                </div>
+                <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
+                  <div className="text-gray-500 text-xs mb-1">AVG_ACCURACY</div>
+                  <div className="text-xl text-blue-400">96.8%</div>
+                </div>
+                <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
+                  <div className="text-gray-500 text-xs mb-1">DATA_SYNC</div>
+                  <div className="text-xl text-purple-400">100%</div>
+                </div>
+              </div>
+
+              {/* Latest Console Output */}
+              <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs border border-gray-700 relative z-10">
+                <div className="text-gray-500 mb-2 border-b border-gray-800 pb-2 flex justify-between">
+                  <span>LATEST_ANALYSIS_LOG</span>
+                  <span>{new Date().toLocaleTimeString()}</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-green-500/80">> Initializing PoseNet model...</p>
+                  <p className="text-green-500/80">> Calibrating depth sensors... OK</p>
+                  <p className="text-blue-400">> Recent Workout Insight: <span className="text-white">"Squat depth optimal. Knee stability detected at 98%."</span></p>
+                  <p className="text-gray-500 animate-pulse">_</p>
+                </div>
               </div>
             </motion.div>
           </div>

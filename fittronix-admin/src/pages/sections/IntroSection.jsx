@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 
 export default function IntroSection() {
   return (
-    <section className="py-36 bg-[#0F1318]">
+    <section id="about" className="py-36 bg-[#0F1318]">
       <div className="max-w-7xl mx-auto px-6 md:px-8">
         <motion.div initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
           <h2 className="text-4xl font-bold text-[#E4E6EB]">Designed for clarity & performance</h2>

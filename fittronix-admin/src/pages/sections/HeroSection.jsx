@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 
 /* Dark hero — big, cinematic. Accent uses #4FC4FF. */
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
@@ -7,7 +8,7 @@ const fadeUp = { hidden: { opacity: 0, y: 28 }, show: { opacity: 1, y: 0, transi
 
 export default function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-[#0F1115]">
+    <section id="home" className="relative overflow-hidden bg-[#0F1115]">
       <div className="max-w-7xl mx-auto px-6 md:px-8 py-40">
         <motion.div initial="hidden" animate="show" variants={container} className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
           <motion.div variants={fadeUp}>
@@ -20,9 +21,11 @@ export default function HeroSection() {
             </p>
 
             <div className="mt-10 flex flex-wrap gap-4 items-center">
-              <motion.a whileTap={{ scale: 0.98 }} href="#howitworks" className="px-8 py-4 rounded-lg bg-[#0B1220] border border-[#213241] text-[#E4E6EB] font-semibold shadow-lg">
-                How it works
-              </motion.a>
+              <Link to="/how-it-works">
+                <motion.div whileTap={{ scale: 0.98 }} className="px-8 py-4 rounded-lg bg-[#0B1220] border border-[#213241] text-[#E4E6EB] font-semibold shadow-lg inline-block">
+                  How it works
+                </motion.div>
+              </Link>
 
               <motion.a whileTap={{ scale: 0.98 }} href="#features" className="px-8 py-4 rounded-lg border border-[#2A3440] text-[#9FA6B2] font-semibold" style={{ background: 'transparent' }}>
                 Explore features
@@ -43,17 +46,6 @@ export default function HeroSection() {
                 alt="Hero artwork"
                 className="w-full h-[720px] object-cover"
               />
-            </div>
-
-            <div className="mt-6 flex gap-4">
-              <div className="p-3 rounded-lg bg-[#0B1220] border border-[#22313e] shadow">
-                <div className="text-xs text-[#9FA6B2]">Accuracy</div>
-                <div className="font-semibold text-[#E4E6EB]">98%</div>
-              </div>
-              <div className="p-3 rounded-lg bg-[#0B1220] border border-[#22313e] shadow">
-                <div className="text-xs text-[#9FA6B2]">Latency</div>
-                <div className="font-semibold text-[#E4E6EB]">~120ms</div>
-              </div>
             </div>
           </motion.div>
         </motion.div>
